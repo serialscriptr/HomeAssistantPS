@@ -14,4 +14,5 @@ See Home Assistant REST API docs here: https://developers.home-assistant.io/docs
 - Update some of the functions to default to asking for confirmation before running
 - Update all functions to better support -verbose parameter
 - Update majority of functions to support -whatif parameter
+- Fix Get-HAStateHistory from being a giant elseif tree that calls rest method directly rather than using helper function
 - (Maybe) Provide specific functions for various home assistant service domains
