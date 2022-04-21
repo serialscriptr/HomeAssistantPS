@@ -16,3 +16,4 @@ See Home Assistant REST API docs here: https://developers.home-assistant.io/docs
 - Update majority of functions to support -whatif parameter
 - Fix Get-HAStateHistory from being a giant elseif tree that calls rest method directly rather than using helper function
 - (Maybe) Provide specific functions for various home assistant service domains
+- (If possible) find a way to make Get-HACameraProxy useful within powershell
