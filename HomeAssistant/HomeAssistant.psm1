@@ -5,20 +5,20 @@
 		[ValidateScript({ $_ -match "^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$" -or $_ -ieq "homeassistant.local"})]
 		[string]$ip,
 		[Parameter(Mandatory = $false, HelpMessage = "Port used to connect to home assistant's web gui. Default is 8123")]
-		[int]$port = '8123',
+		[string]$port = '8123',
 		[Parameter(Mandatory = $true, HelpMessage = "Long-Lived Access Token created under user profile in home assistant.")]
 		[string]$token
 	)
 	
-	$script:ha_api_headers = @{ Authorization = "Bearer " + $token }
-	$script:ha_api_url = "http://" + "$ip" + ":" + "$port" + "/api/"
+	$global:ha_api_headers = @{ Authorization = "Bearer " + $token }
+	$global:ha_api_url = "http://" + "$ip" + ":" + "$port" + "/api/"
 	
 	try
 	{
 		write-output -inputobject "Testing connection... "
 		$api_connection = (Invoke-WebRequest -uri $ha_api_url -Method GET -Headers $ha_api_headers)
-		$script:ha_api_configured = $true
-		write-output -inputobject "Connection to Home-Assistant API succeeded! (" ($api_connection).StatusCode ($api_connection).StatusDescription ")"
+		$global:ha_api_configured = $true
+		write-output "Connection to Home-Assistant API succeeded! ( $($api_connection.StatusCode) $($api_connection.StatusDescription) )"
 	}
 	catch
 	{
@@ -31,9 +31,9 @@
 			write-output -inputobject "Connection failed - ICMP request timed out!"
 		}
 		
-		$script:ha_api_url = $null
-		$script:ha_api_headers = $null
-		$script:ha_api_configured = $false
+		$global:ha_api_url = $null
+		$global:ha_api_headers = $null
+		$global:ha_api_configured = $false
 	}
 	
 }
@@ -612,46 +612,48 @@ function Invoke-HARestMethod
 			}
 			default {
 				# error
-			}
-		}
-		Catch
-		{
-			$HAError = $Error[0]
-			$Check = Invoke-HACheck
-			
-			if ($check)
-			{
-				Write-Warning "Home assistant api check was successful but previous rest command resulted in error."
-				switch ($($HAError.ErrorDetails.Message))
-				{
-					"404: Not Found" {
-						Write-Warning "Home assistant returned error 404, are the parameters supplied correct?"; Throw
-					}
-					"401: Unauthorized" {
-						Write-Warning "Home assistant returned error 401, are you authenticated to home assistant?"; Throw
-					}
-					"400: Bad Request" {
-						Write-Warning "Home assistant returned error 400: Bad Request."; Throw
-					}
-					"405: Method not allowed" {
-						Write-Warning "Home assistant returned error 405: Method not allowed."; Throw
-					}
-					default {
-						$HAError; Throw
-					}
-				}
-			}
-			else
-			{
-				Write-Warning "Home assistant api check resulted in a failure."; Throw
+				throw
 			}
 		}
 	}
+	Catch
+	{
+		$HAError = $Error[0]
+		$Check = Invoke-HACheck
+		
+		if ($check)
+		{
+			Write-Warning "Home assistant api check was successful but previous rest command resulted in error."
+			switch ($($HAError.ErrorDetails.Message))
+			{
+				"404: Not Found" {
+					Write-Warning "Home assistant returned error 404, are the parameters supplied correct?"; Throw
+				}
+				"401: Unauthorized" {
+					Write-Warning "Home assistant returned error 401, are you authenticated to home assistant?"; Throw
+				}
+				"400: Bad Request" {
+					Write-Warning "Home assistant returned error 400: Bad Request."; Throw
+				}
+				"405: Method not allowed" {
+					Write-Warning "Home assistant returned error 405: Method not allowed."; Throw
+				}
+				default {
+					$HAError; Throw
+				}
+			}
+		}
+		else
+		{
+			Write-Warning "Home assistant api check resulted in a failure."; Throw
+		}
+	}
+	
 }
 
 function Get-HAServiceDomain
 {
-	$Services = Get-HAServices
+	$Services = Get-HAService
 	
 	Return $($Services | select-object -expand domain)
 }
@@ -740,3 +742,22 @@ function Check-HATemplate
 	
 	Invoke-HARestMethod -RestMethod post -Endpoint "template" -Body $Body
 }
+
+$PublicFunctions = "Check-HATemplate", `
+					"Set-HAState", `
+					"Get-HAServiceDomain", `
+					"Invoke-HACheck", `
+					"Get-HAErrorLog", `
+					"Get-HAStateHistory", `
+					"Get-HAStateHistory", `
+					"New-TimeStamp", `
+					"Get-HALogBook", `
+					"Get-HAEvent", `
+					"Invoke-HAConfigCheck", `
+					"Get-HAService", `
+					"New-HASession", `
+					"Invoke-HAService", `
+					"Get-HAConfig", `
+					"Get-HAState"
+
+Export-ModuleMember -Function $PublicFunctions
