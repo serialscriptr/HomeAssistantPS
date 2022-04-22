@@ -2,23 +2,46 @@
 {
 	Param (
 		[Parameter(Mandatory = $true, HelpMessage = "Local IP address of the home assistant instance to connect to or Homeassistant.local. Example: 192.168.1.2")]
-		[ValidateScript({ $_ -match "^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$" -or $_ -ieq "homeassistant.local"})]
+		[ValidateScript({ $_ -match "^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$" -or $_ -ieq "homeassistant.local" })]
 		[string]$ip,
 		[Parameter(Mandatory = $false, HelpMessage = "Port used to connect to home assistant's web gui. Default is 8123")]
 		[string]$port = '8123',
 		[Parameter(Mandatory = $true, HelpMessage = "Long-Lived Access Token created under user profile in home assistant.")]
-		[string]$token
+		[string]$token,
+		[Parameter(Mandatory = $false)]
+		[bool]$UseSSL = $false 
 	)
 	
-	$global:ha_api_headers = @{ Authorization = "Bearer " + $token }
-	$global:ha_api_url = "http://" + "$ip" + ":" + "$port" + "/api/"
+	$script:ha_api_headers = @{ Authorization = "Bearer " + $token }
+	if ($UseSSL)
+	{
+		$script:ha_api_url = "https://" + "$ip" + ":" + "$port" + "/api/"
+	}
+	else
+	{
+		$script:ha_api_url = "http://" + "$ip" + ":" + "$port" + "/api/"
+	}
 	
 	try
 	{
 		write-output -inputobject "Testing connection... "
 		$api_connection = (Invoke-WebRequest -uri $ha_api_url -Method GET -Headers $ha_api_headers)
-		$global:ha_api_configured = $true
+		$script:ha_api_configured = $true
+		Write-Output "Checking some environment information..."
+		$script:ha_all_entities = Get-HAEntityID
+		Write-Output "Setting up autocomplete helpers..."
+		$entity_autocomplete = {
+			param ($commandName,$parameterName,$stringMatch)
+			$ha_all_entities.entity_id | Where-Object {
+				$_ -like "$stringMatch*"
+			} | ForEach-Object {
+				"'$_'"
+			}
+			
+		}
+		Register-ArgumentCompleter -CommandName Get-HALogBook, Invoke-HAService, Get-HAState, Get-HAStateHistory, Set-HAState -ParameterName entity_id -ScriptBlock $entity_autocomplete
 		write-output "Connection to Home-Assistant API succeeded! ( $($api_connection.StatusCode) $($api_connection.StatusDescription) )"
+		
 	}
 	catch
 	{
@@ -31,9 +54,10 @@
 			write-output -inputobject "Connection failed - ICMP request timed out!"
 		}
 		
-		$global:ha_api_url = $null
-		$global:ha_api_headers = $null
-		$global:ha_api_configured = $false
+		$script:ha_all_entities = $null
+		$script:ha_api_url = $null
+		$script:ha_api_headers = $null
+		$script:ha_api_configured = $false
 	}
 	
 }
@@ -51,14 +75,9 @@ Function Invoke-HAService
 		[string]$entity_id
 	)
 	
-	if (!$ha_api_configured)
-	{
-		write-output -inputobject "No active Home Assistant session. Run 'New-HASession' prior to running this command."; Break
-	}
-	
 	if ($ServiceDomain)
 	{
-		$ValidServices = Get-HAServiceDomains
+		$ValidServices = Get-HAServiceDomain
 		
 		if ($ValidServices.domain -icontains $ServiceDomain)
 		{
@@ -66,7 +85,7 @@ Function Invoke-HAService
 		}
 		else
 		{
-			$MatchingDomainServices = $ValidServices | where-object { $_.domain -ieq $ServiceDomain } | select-object -expand services
+			$MatchingDomainServices = $ValidServices | where-object { $_.domain -ieq $ServiceDomain } | select-object -ExpandProperty services
 			if ($MatchingDomainServices -inotcontains $Service)
 			{
 				Write-Warning "Provided service method is not a valid method for the provided service domain."; throw
@@ -81,7 +100,7 @@ Function Invoke-HAService
 	if ($entity_id)
 	{
 		$Body = @{
-			entity_id = $entity_id	
+			entity_id = $entity_id
 		} | ConvertTo-Json
 		Invoke-HARestMethod -RestMethod post -Endpoint "services/$ServiceDomain/$Service" -Body $Body
 	}
@@ -93,11 +112,6 @@ Function Invoke-HAService
 
 function Get-HAConfig
 {
-	if (!$ha_api_configured)
-	{
-		write-output -inputobject "No active Home Assistant session. Run 'New-HASession' prior to running this command."; Break
-	}
-	
 	Invoke-HARestMethod -RestMethod get -Endpoint "config"
 }
 
@@ -105,15 +119,9 @@ function Get-HAState
 {
 	[CmdletBinding()]
 	Param (
-		[Parameter(Mandatory = $false, ValueFromPipelineByPropertyName = $true)
-		]
+		[Parameter(Mandatory = $false, ValueFromPipelineByPropertyName = $true)]
 		[string]$entity_id
 	)
-	
-	if (!$ha_api_configured)
-	{
-		write-output -inputobject "No active Home Assistant session. Run 'New-HASession' prior to running this command."; Break
-	}	
 	
 	if ($entity_id)
 	{
@@ -123,39 +131,37 @@ function Get-HAState
 	{
 		Invoke-HARestMethod -RestMethod get -Endpoint "states"
 	}
-	
 }
 
 Function Get-HAService
 {
-	if (!$ha_api_configured)
-	{
-		write-output -inputobject "No active Home Assistant session. Run 'New-HASession' prior to running this command."; Break
-	}
-	
-	Invoke-HARestMethod -RestMethod get -Endpoint "services"
+	$($(Invoke-HARestMethod -RestMethod get -Endpoint "services") | Sort-Object -Property domain )
 }
 
 Function Invoke-HAConfigCheck
 {
-	
-	if (!$ha_api_configured)
-	{
-		write-output -inputobject "No active Home Assistant session. Run 'New-HASession' prior to running this command."; Break
-	}
-	
 	Invoke-HARestMethod -RestMethod post -Endpoint "config/core/check_config"
 }
 
 Function Get-HAEvent
 {
-	
-	if (!$ha_api_configured)
-	{
-		write-output -inputobject "No active Home Assistant session. Run 'New-HASession' prior to running this command."; Break
+	param
+	(
+		[parameter(Mandatory = $false)]
+		[ValidateSet("event", "listener_count")]
+		$SortBy = "event"
+	)
+	switch ($SortBy) {
+		"event" {
+			$(Invoke-HARestMethod -RestMethod get -Endpoint "events") | Sort-Object -Property event
+		}
+		"listener_count" {
+			$(Invoke-HARestMethod -RestMethod get -Endpoint "events") | Sort-Object -Property listener_count
+		}
+		default {
+			$(Invoke-HARestMethod -RestMethod get -Endpoint "events") | Sort-Object -Property event
+		}
 	}
-	
-	Invoke-HARestMethod -RestMethod get -Endpoint "events"
 }
 
 Function Get-HALogBook
@@ -172,14 +178,11 @@ Function Get-HALogBook
 		[ValidateScript({ $_ -match "^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?(([+-]\d\d:\d\d)|Z)?$" })]
 		[String]$end_time
 	)
-		
-	if (!$ha_api_configured)
-	{
-		write-output -inputobject "No active Home Assistant session. Run 'New-HASession' prior to running this command."; Break
-	}
+	
 	
 	$JoinedParams = $($PSBoundParameters.keys | Sort-Object) -join ""
-	switch ($JoinedParams) {
+	switch ($JoinedParams)
+	{
 		"end_timeentity_idstart_time" {
 			Invoke-HARestMethod -RestMethod get -Endpoint "logbook/$start_time" -Arguments "?end_time=$end_time&entity=$entity_id"
 		}
@@ -201,7 +204,7 @@ Function Get-HALogBook
 		"entity_id" {
 			Invoke-HARestMethod -RestMethod get -Endpoint "logbook" -Arguments "?entity=$entity_id"
 		}
-	}	
+	}
 }
 
 function New-TimeStamp
@@ -228,11 +231,6 @@ function New-TimeStamp
 		[datetime]$pstime
 		
 	)
-	
-	if (!$ha_api_configured)
-	{
-		write-output -inputobject "No active Home Assistant session. Run 'New-HASession' prior to running this command."; Break
-	}
 	
 	if ($pstime -and ($Year -or $Month -or $Day -or $Hour -or $Minute))
 	{
@@ -282,264 +280,68 @@ function Get-HAStateHistory
 		[parameter(Mandatory = $false, HelpMessage = "Optional paramater to skip returning attributes from the database (much faster).")]
 		[bool]$no_attributes = $false,
 		[parameter(Mandatory = $false, HelpMessage = "Optional paramater to only return significant state changes.")]
-		[bool]$significant_changes_only
+		[bool]$significant_changes_only = $false
 	)
 	
-	if (!$ha_api_configured)
-	{
-		write-output -inputobject "No active Home Assistant session. Run 'New-HASession' prior to running this command."; Break
-	}
+	$Arguments = "?"
 	
-	try
+	forEach ($param in $($PSBoundParameters.Keys | where {$_ -ine "start_time"}))
 	{
-		
-		# there has to be a better way to do this...
-		if ($entity_id)
-		{
-			if ($entity_id.Count -gt 1)
-			{
-				$entities = $entity_id -join ","
+		switch ($param) {
+			"end_time" {
+				$Arguments = $Arguments + "end_time=$end_time"
 			}
-			else
-			{
-				$entities = $entity_id
-			}
-			
-			if ($start_time -and $end_time)
-			{
-				if ($minimal_response -and $no_attributes -and $significant_changes_only)
+			"entity_id" {
+				if ($entity_id.Count -gt 1)
 				{
-					Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period/" + $start_time + "?filter_entity_id=$entities&end_time=$end_time&minimal_response&no_attributes&significant_changes_only") -Headers $ha_api_headers
-				}
-				elseif ($minimal_response -and $no_attributes)
-				{
-					Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period/" + $start_time + "?filter_entity_id=$entities&end_time=$end_time&minimal_response&no_attributes") -Headers $ha_api_headers
-				}
-				elseif ($minimal_response -and $significant_changes_only)
-				{
-					Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period/" + $start_time + "?filter_entity_id=$entities&end_time=$end_time&minimal_response&significant_changes_only") -Headers $ha_api_headers
-				}
-				elseif ($no_attributes -and $significant_changes_only)
-				{
-					Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period/" + $start_time + "?filter_entity_id=$entities&end_time=$end_time&no_attributes&significant_changes_only") -Headers $ha_api_headers
-				}
-				elseif ($no_attributes)
-				{
-					Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period/" + $start_time + "?filter_entity_id=$entities&end_time=$end_time&no_attributes") -Headers $ha_api_headers
-				}
-				elseif ($minimal_response)
-				{
-					Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period/" + $start_time + "?filter_entity_id=$entities&end_time=$end_time&minimal_response") -Headers $ha_api_headers
-				}
-				elseif ($significant_changes_only)
-				{
-					Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period/" + $start_time + "?filter_entity_id=$entities&end_time=$end_time&significant_changes_only") -Headers $ha_api_headers
+					$entities = $entity_id -join ","
 				}
 				else
 				{
-					Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period/" + $start_time + "?filter_entity_id=$entities&end_time=$end_time") -Headers $ha_api_headers
+					$entities = $entity_id
 				}
+				
+				$Arguments = $Arguments + "&filter_entity_id=$entities"				
 			}
-			elseif ($start_time)
-			{
-				if ($minimal_response -and $no_attributes -and $significant_changes_only)
-				{
-					Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period/" + $start_time + "?filter_entity_id=$entities&minimal_response&no_attributes&significant_changes_only") -Headers $ha_api_headers
-				}
-				elseif ($minimal_response -and $no_attributes)
-				{
-					Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period/" + $start_time + "?filter_entity_id=$entities&minimal_response&no_attributes") -Headers $ha_api_headers
-				}
-				elseif ($minimal_response -and $significant_changes_only)
-				{
-					Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period/" + $start_time + "?filter_entity_id=$entities&minimal_respons&significant_changes_only") -Headers $ha_api_headers
-				}
-				elseif ($no_attributes -and $significant_changes_only)
-				{
-					Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period/" + $start_time + "?filter_entity_id=$entities&no_attributes&significant_changes_only") -Headers $ha_api_headers
-				}
-				elseif ($no_attributes)
-				{
-					Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period/" + $start_time + "?filter_entity_id=$entities&no_attributes") -Headers $ha_api_headers
-				}
-				elseif ($minimal_response)
-				{
-					Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period/" + $start_time + "?filter_entity_id=$entities&minimal_response") -Headers $ha_api_headers
-				}
-				elseif ($significant_changes_only)
-				{
-					Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period/" + $start_time + "?filter_entity_id=$entities&significant_changes_only") -Headers $ha_api_headers
-				}
-				else
-				{
-					Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period/" + $start_time + "?filter_entity_id=$entities") -Headers $ha_api_headers
-				}
+			"minimal_response" {
+				$Arguments = $Arguments + "&minimal_response"
 			}
-			elseif ($end_time)
-			{
-				if ($minimal_response -and $no_attributes -and $significant_changes_only)
-				{
-					Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period" + "?filter_entity_id=$entities&end_time=$end_time&minimal_response&no_attributes&significant_changes_only") -Headers $ha_api_headers
-				}
-				elseif ($minimal_response -and $no_attributes)
-				{
-					Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period" + "?filter_entity_id=$entities&end_time=$end_time&minimal_response&no_attributes") -Headers $ha_api_headers
-				}
-				elseif ($minimal_response -and $significant_changes_only)
-				{
-					Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period" + "?filter_entity_id=$entities&end_time=$end_time&minimal_response&significant_changes_only") -Headers $ha_api_headers
-				}
-				elseif ($no_attributes -and $significant_changes_only)
-				{
-					Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period" + "?filter_entity_id=$entities&end_time=$end_time&no_attributes&significant_changes_only") -Headers $ha_api_headers
-				}
-				elseif ($no_attributes)
-				{
-					Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period" + "?filter_entity_id=$entities&end_time=$end_time&no_attributes") -Headers $ha_api_headers
-				}
-				elseif ($minimal_response)
-				{
-					Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period" + "?filter_entity_id=$entities&end_time=$end_time&minimal_response") -Headers $ha_api_headers
-				}
-				elseif ($significant_changes_only)
-				{
-					Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period" + "?filter_entity_id=$entities&end_time=$end_times&significant_changes_only") -Headers $ha_api_headers
-				}
-				else
-				{
-					Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period" + "?filter_entity_id=$entities&end_time=$end_time") -Headers $ha_api_headers
-				}
+			"no_attributes" {
+				$Arguments = $Arguments + "&no_attributes"
 			}
-		}
-		elseif ($start_time -and $end_time)
-		{
-			if ($minimal_response -and $no_attributes -and $significant_changes_only)
-			{
-				Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period/" + $start_time + "?end_time=$end_time&minimal_response&no_attributes&significant_changes_only") -Headers $ha_api_headers
-			}
-			elseif ($minimal_response -and $no_attributes)
-			{
-				Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period/" + $start_time + "?end_time=$end_time&minimal_response&no_attributes") -Headers $ha_api_headers
-			}
-			elseif ($minimal_response -and $significant_changes_only)
-			{
-				Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period/" + $start_time + "?end_time=$end_time&minimal_response&significant_changes_only") -Headers $ha_api_headers
-			}
-			elseif ($no_attributes -and $significant_changes_only)
-			{
-				Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period/" + $start_time + "?end_time=$end_time&no_attributes&significant_changes_only") -Headers $ha_api_headers
-			}
-			elseif ($no_attributes)
-			{
-				Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period/" + $start_time + "?end_time=$end_time&no_attributes") -Headers $ha_api_headers
-			}
-			elseif ($minimal_response)
-			{
-				Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period/" + $start_time + "?end_time=$end_time&minimal_response") -Headers $ha_api_headers
-			}
-			elseif ($significant_changes_only)
-			{
-				Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period/" + $start_time + "?end_time=$end_time&significant_changes_only") -Headers $ha_api_headers
-			}
-			else
-			{
-				Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period/" + $start_time + "?end_time=$end_time") -Headers $ha_api_headers
-			}
-		}
-		elseif ($start_time)
-		{
-			if ($minimal_response -and $no_attributes -and $significant_changes_only)
-			{
-				Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period/" + $start_time + "?minimal_response&no_attributes&significant_changes_only") -Headers $ha_api_headers
-			}
-			elseif ($minimal_response -and $no_attributes)
-			{
-				Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period/" + $start_time + "?minimal_response&no_attributes") -Headers $ha_api_headers
-			}
-			elseif ($minimal_response -and $significant_changes_only)
-			{
-				Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period/" + $start_time + "?minimal_respons&significant_changes_only") -Headers $ha_api_headers
-			}
-			elseif ($no_attributes -and $significant_changes_only)
-			{
-				Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period/" + $start_time + "?no_attributes&significant_changes_only") -Headers $ha_api_headers
-			}
-			elseif ($no_attributes)
-			{
-				Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period/" + $start_time + "?no_attributes") -Headers $ha_api_headers
-			}
-			elseif ($minimal_response)
-			{
-				Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period/" + $start_time + "?minimal_response") -Headers $ha_api_headers
-			}
-			elseif ($significant_changes_only)
-			{
-				Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period/" + $start_time + "?significant_changes_only") -Headers $ha_api_headers
-			}
-			else
-			{
-				Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period/" + $start_time + "?filter_entity_id=$entities") -Headers $ha_api_headers
-			}
-		}
-		elseif ($end_time)
-		{
-			if ($minimal_response -and $no_attributes -and $significant_changes_only)
-			{
-				Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period" + "?end_time=$end_time&minimal_response&no_attributes&significant_changes_only") -Headers $ha_api_headers
-			}
-			elseif ($minimal_response -and $no_attributes)
-			{
-				Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period" + "?end_time=$end_time&minimal_response&no_attributes") -Headers $ha_api_headers
-			}
-			elseif ($minimal_response -and $significant_changes_only)
-			{
-				Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period" + "?end_time=$end_time&minimal_response&significant_changes_only") -Headers $ha_api_headers
-			}
-			elseif ($no_attributes -and $significant_changes_only)
-			{
-				Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period" + "?end_time=$end_time&no_attributes&significant_changes_only") -Headers $ha_api_headers
-			}
-			elseif ($no_attributes)
-			{
-				Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period" + "?end_time=$end_time&no_attributes") -Headers $ha_api_headers
-			}
-			elseif ($minimal_response)
-			{
-				Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period" + "?end_time=$end_time&minimal_response") -Headers $ha_api_headers
-			}
-			elseif ($significant_changes_only)
-			{
-				Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period" + "?end_time=$end_times&significant_changes_only") -Headers $ha_api_headers
-			}
-			else
-			{
-				Invoke-RestMethod -Method get -uri ("$ha_api_url" + "history/period" + "?end_time=$end_time") -Headers $ha_api_headers
+			"significant_changes_only" {
+				$Arguments = $Arguments + "&significant_changes_only"
 			}
 		}
 	}
-	catch
+	
+	if ($start_time)
 	{
-		$HAError = $Error[0]
-	
-		# something went wrong, check if the api is still working/connected
-		$Check = Invoke-HACheck
-	
-		if ($Check)
+		if ($Arguments)
 		{
-			Write-Warning "Home assistant API is functioning and properly connected but an error occured during this cmdlet. Error:"
-			Return $HAError
+			Invoke-HARestMethod -RestMethod get -Endpoint "history/period/$start_time" -Arguments $Arguments
+		}
+		else
+		{
+			Invoke-HARestMethod -RestMethod get -Endpoint "history/period/$start_time"
+		}
+	}
+	else
+	{
+		if ($Arguments)
+		{
+			Invoke-HARestMethod -RestMethod get -Endpoint "history/period" -Arguments $Arguments
+		}
+		else
+		{
+			Invoke-HARestMethod -RestMethod get -Endpoint "history/period"
 		}
 	}
 }
 
 function Get-HAErrorLog
 {
-	if (!$ha_api_configured)
-	{
-		write-output -inputobject "No active Home Assistant session. Run 'New-HASession' prior to running this command."; Break
-	}
-	
-	Invoke-HARestMethod -RestMethod get -Endpoint "error_log"	
+	Invoke-HARestMethod -RestMethod get -Endpoint "error_log"
 }
 
 function Get-HACameraProxy
@@ -549,11 +351,6 @@ function Get-HACameraProxy
 		[parameter(Mandatory = $true, HelpMessage = "Entity id of the camera to return image data from")]
 		[string]$entity_id
 	)
-	
-	if (!$ha_api_configured)
-	{
-		write-output -inputobject "No active Home Assistant session. Run 'New-HASession' prior to running this command."; Break
-	}
 	
 	Invoke-HARestMethod -RestMethod get -Endpoint "camera_proxy/$entity_id"
 }
@@ -573,7 +370,7 @@ function Invoke-HACheck
 	}
 	else
 	{
-		Return $Check	
+		Return $Check
 	}
 }
 
@@ -655,7 +452,7 @@ function Get-HAServiceDomain
 {
 	$Services = Get-HAService
 	
-	Return $($Services | select-object -expand domain)
+	Return $($Services | select-object -ExpandProperty domain)
 }
 
 function Set-HAState
@@ -682,7 +479,7 @@ function Set-HAState
 			} | ConvertTo-Json
 			
 			Write-Output -InputObject "Invoking post rest method on host $ha_api_url with endpoint `"states/$entity_id`" with the following body data:"
-			Return $Body	
+			Return $Body
 		}
 		else
 		{
@@ -693,29 +490,24 @@ function Set-HAState
 			Write-Output -InputObject "Invoking post rest method on host $ha_api_url with endpoint `"states/$entity_id`" with the following body data:"
 			Return $Body
 		}
-		Write-Output -InputObject ""		
-	}	
-	
-	if (!$ha_api_configured)
-	{
-		write-output -inputobject "No active Home Assistant session. Run 'New-HASession' prior to running this command."; Break
+		Write-Output -InputObject ""
 	}
 	
 	if ($attributes)
 	{
 		$Body = @{
-			state = $state
+			state	   = $state
 			attributes = $($attributes | ConvertTo-Json)
 		} | ConvertTo-Json
 		
-
+		
 		Invoke-HARestMethod -RestMethod post -Endpoint "states/$entity_id" -Body $Body
 		
 	}
 	else
 	{
 		$Body = @{
-			state	   = $state
+			state = $state
 		} | ConvertTo-Json
 		
 		
@@ -723,18 +515,13 @@ function Set-HAState
 	}
 }
 
-function Check-HATemplate
+function Test-HATemplate
 {
 	param
 	(
 		[parameter(Mandatory = $true)]
 		[string]$template
 	)
-	
-	if (!$ha_api_configured)
-	{
-		write-output -inputobject "No active Home Assistant session. Run 'New-HASession' prior to running this command."; Break
-	}
 	
 	$Body = @{
 		template = $template
@@ -743,21 +530,38 @@ function Check-HATemplate
 	Invoke-HARestMethod -RestMethod post -Endpoint "template" -Body $Body
 }
 
-$PublicFunctions = "Check-HATemplate", `
-					"Set-HAState", `
-					"Get-HAServiceDomain", `
-					"Invoke-HACheck", `
-					"Get-HAErrorLog", `
-					"Get-HAStateHistory", `
-					"Get-HAStateHistory", `
-					"New-TimeStamp", `
-					"Get-HALogBook", `
-					"Get-HAEvent", `
-					"Invoke-HAConfigCheck", `
-					"Get-HAService", `
-					"New-HASession", `
-					"Invoke-HAService", `
-					"Get-HAConfig", `
-					"Get-HAState"
+function Get-HAEntityID
+{
+	$allEntities = $(Get-HAState) | Select-Object -ExpandProperty entity_id
+	$returnEntities = @()
+	
+	foreach ($entity in $allEntities)
+	{
+		$psobj = New-Object -TypeName System.Management.Automation.PSObject
+		$psobj | Add-Member -NotePropertyName domain -NotePropertyValue $($entity -replace "\..*")
+		$psobj | Add-Member -NotePropertyName entity_id -NotePropertyValue $entity
+		$returnEntities += $psobj
+	}
+	
+	Return $($returnEntities | Sort-Object -Property domain)
+}
+
+$PublicFunctions = "Test-HATemplate", `
+"Set-HAState", `
+"Get-HAServiceDomain", `
+"Invoke-HACheck", `
+"Get-HAErrorLog", `
+"Get-HAStateHistory", `
+"Get-HAStateHistory", `
+"New-TimeStamp", `
+"Get-HALogBook", `
+"Get-HAEvent", `
+"Invoke-HAConfigCheck", `
+"Get-HAService", `
+"New-HASession", `
+"Invoke-HAService", `
+"Get-HAConfig", `
+"Get-HAState", `
+"Get-HAEntityID"
 
 Export-ModuleMember -Function $PublicFunctions

@@ -76,7 +76,7 @@
 	NestedModules = @()
 	
 	# Functions to export from this module
-	FunctionsToExport = 'Get-HAServiceDomain,Get-HACameraProxy,Get-HAErrorLog,Get-HAStateHistory,New-TimeStamp,Get-HALogBook,Get-HAEvent,Invoke-HAConfigCheck,Get-HAService,Get-HAState,Get-HAConfig,Invoke-HAService,New-HASession' #For performance, list functions explicitly
+	FunctionsToExport = 'Get-HAServiceDomain,Get-HAErrorLog,Get-HAStateHistory,New-TimeStamp,Get-HALogBook,Get-HAEvent,Invoke-HAConfigCheck,Get-HAService,Get-HAState,Get-HAConfig,Invoke-HAService,New-HASession' #For performance, list functions explicitly
 	
 	# Cmdlets to export from this module
 	CmdletsToExport = '*' 
