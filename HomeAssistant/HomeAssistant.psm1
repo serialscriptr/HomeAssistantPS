@@ -1,5 +1,38 @@
 ﻿Function New-HASession
 {
+<#
+.SYNOPSIS
+Connects to a Home Assistant
+	
+.DESCRIPTION
+Authenticates to the provided Home Assistant so all other functions of the module can run.
+	
+.PARAMETER ip
+IP address of the Home Assistant to connect to or homeassistant.local
+	
+.PARAMETER port
+Optional parameter to specify the port of the Home Assistant to connect to. Defaults to 8123
+	
+.PARAMETER token
+Long lived access token created under user profile in Home Assistant web ui. 
+	
+.INPUTS
+System.String, System.Boolean
+
+.OUTPUTS
+System.String
+
+.NOTES
+FunctionName : Invoke-HAService
+Created by   : Flemming Sørvollen Skaret
+Original Release Date : 17.03.2019
+Original Project : https://github.com/flemmingss/
+
+.CHANGES:
+04/23/2022 - Ryan McAvoy - Changed parameters from being all mandatory. Port defaults to 8123. UseSSL parameter added. Changed Write-host to Write-output
+						   added registration of auto completers for entity id parameters in module functions. Added parameter validate scripts. Changed
+						   from setting various variables as global and instead made them local to the script for privacy reasons.
+#>
 	Param (
 		[Parameter(Mandatory = $true, HelpMessage = "Local IP address of the home assistant instance to connect to or Homeassistant.local. Example: 192.168.1.2")]
 		[ValidateScript({ $_ -match "^(?:[0-9]{1,3}\.){3}[0-9]{1,3}$" -or $_ -ieq "homeassistant.local" })]
@@ -64,6 +97,37 @@
 
 Function Invoke-HAService
 {
+<#
+.SYNOPSIS
+Calls a service within a specific domain.
+	
+.DESCRIPTION
+Triggers the service provided of the service domain for the connected Home Assistant
+	
+.PARAMETER service
+The desired service to call for the connected Home Assistant
+	
+.PARAMETER serviceDomain
+Optional parameter to specify the domain of the service being called
+	
+.PARAMETER entity_id
+Any valid entity id present in the connected Home Assistant
+	
+.INPUTS
+System.String
+
+.OUTPUTS
+System.Management.Automation.PSCustomObject
+
+.NOTES
+FunctionName : Invoke-HAService
+Created by   : Flemming Sørvollen Skaret
+Original Release Date : 17.03.2019
+Original Project : https://github.com/flemmingss/
+
+.CHANGES:
+04/23/2022 - Ryan McAvoy - Changed parameters from being all mandatory. Added service validation check. Change to use Invoke-HARestMethod
+#>
 	[CmdletBinding()]
 	param
 	(
@@ -112,11 +176,56 @@ Function Invoke-HAService
 
 function Get-HAConfig
 {
+<#
+.SYNOPSIS
+Returns the current configuration as a psobject
+	
+.DESCRIPTION
+Queries and retuns the current connected Home Assistant configuration. Note this is different from the configuration.yaml file.
+
+.OUTPUTS
+System.Management.Automation.PSCustomObject
+
+.NOTES
+FunctionName : Get-HAConfig
+Created by   : Ryan McAvoy
+Date Coded   : 04/23/2022
+More info    : https://serialscripter.tech
+#>
 	Invoke-HARestMethod -RestMethod get -Endpoint "config"
 }
 
 function Get-HAState
 {
+<#
+.SYNOPSIS
+Returns a psobject of state objects.
+	
+.DESCRIPTION
+Queries and returns the information on entity states for the connected Home Assistant.
+
+.PARAMETER entity_id
+Any valid entity id present in the connected Home Assistant. Used to filter the returned states by the provided entity id.
+	
+.EXAMPLE
+Get-HAState
+
+Description
+---------------------------------------
+Returns all current entity id states
+
+.INPUTS
+System.String
+
+.OUTPUTS
+System.Management.Automation.PSCustomObject
+
+.NOTES
+FunctionName : Get-HAState
+Created by   : Ryan McAvoy
+Date Coded   : 04/23/2022
+More info    : https://serialscripter.tech
+#>
 	[CmdletBinding()]
 	Param (
 		[Parameter(Mandatory = $false, ValueFromPipelineByPropertyName = $true)]
@@ -135,16 +244,75 @@ function Get-HAState
 
 Function Get-HAService
 {
+<#
+.SYNOPSIS
+Returns a psobject of service objects.
+	
+.DESCRIPTION
+Returns all service domains for the connected Home Assistant and includes valid services that can be called
+on the service domain.
+
+.OUTPUTS
+System.Management.Automation.PSCustomObject
+
+.NOTES
+FunctionName : Get-HAService
+Created by   : Ryan McAvoy
+Date Coded   : 04/23/2022
+More info    : https://serialscripter.tech
+#>
 	$($(Invoke-HARestMethod -RestMethod get -Endpoint "services") | Sort-Object -Property domain )
 }
 
 Function Invoke-HAConfigCheck
 {
+<#
+.SYNOPSIS
+Trigger a check of configuration.yaml
+
+.DESCRIPTION
+Triggers a config check for the connected Home Assistant. If successful the psobject returned will have a result
+vaule of 'valid'
+
+.INPUTS
+System.String
+
+.OUTPUTS
+System.Management.Automation.PSCustomObject
+
+.NOTES
+FunctionName : Invoke-HAConfigCheck
+Created by   : Ryan McAvoy
+Date Coded   : 04/23/2022
+More info    : https://serialscripter.tech
+#>
 	Invoke-HARestMethod -RestMethod post -Endpoint "config/core/check_config"
 }
 
 Function Get-HAEvent
 {
+<#
+.SYNOPSIS
+Returns an array of event objects
+	
+.DESCRIPTION
+Queries and returns event object names and listener counts for each
+	
+.PARAMETER sortby
+Optional parameter to change how the returned information is sorted, by event or listerner count
+	
+.INPUTS
+System.String
+
+.OUTPUTS
+System.Management.Automation.PSCustomObject
+
+.NOTES
+FunctionName : Get-HAEvent
+Created by   : Ryan McAvoy
+Date Coded   : 04/23/2022
+More info    : https://serialscripter.tech
+#>
 	param
 	(
 		[parameter(Mandatory = $false)]
@@ -166,6 +334,42 @@ Function Get-HAEvent
 
 Function Get-HALogBook
 {
+<#
+.SYNOPSIS
+Returns an array of logbook entries.
+	
+.DESCRIPTION
+Queries and returns the logbook entires based on the given parameters (if any) from the connected Home Assistant
+	
+.PARAMETER entity_id
+Any valid entity id present in the connect Home Assistant to filter the logbook entires to
+	
+.PARAMETER start_time
+An ISO 8601 formatted time stamp that determines the start time of the logbook entires returned.
+Defaults to one day before the current day.
+	
+.PARAMETER end_time
+An ISO 8601 formatted time stamp that determines the end time of the logbook entries returned
+
+.EXAMPLE
+Get-HALogBook -entity_id $entity
+
+Description
+---------------------------------------
+Returns logbook entries for the entity_id provided within the last 24 hours as no start time is provided.
+
+.INPUTS
+System.String
+
+.OUTPUTS
+System.String
+
+.NOTES
+FunctionName : Get-HALogbook
+Created by   : Ryan McAvoy
+Date Coded   : 04/23/2022
+More info    : https://serialscripter.tech
+#>
 	[CmdletBinding()]
 	param
 	(
@@ -209,6 +413,58 @@ Function Get-HALogBook
 
 function New-TimeStamp
 {
+<#
+.SYNOPSIS
+Return a time stamp in ISO 8601 format
+	
+.DESCRIPTION
+Based on the provided input, return an ISO 8601 formated time stamp. Provided input can be a datetime object or
+the year, month, day, hour, minute desired. PSTime parameter cannot be used with any other parameter excluding common ones.
+	
+.PARAMETER years
+4 digit integer that represents the year of the time stamp
+
+.PARAMETER month
+2 digit integer that represents the month of the time stamp
+	
+.PARAMETER day
+2 digit integer that represents the day of the time stamp
+	
+.PARAMETER hour
+2 digit integer that represents the hour of the time stamp
+
+.PARAMETER minutes
+2 digit integer that represents the minutes of the time stamp
+
+.PARAMETER pstime
+DateTime object to convert to the ISO 8601 format time stamp. Cannot be used with any other parameter other than common ones.
+
+.EXAMPLE
+New-TimeStamp -pstime $(get-date)
+
+Description
+---------------------------------------
+Returns an ISO 8601 formatted time stamp of the current time and date
+
+.EXAMPLE
+New-TimeStamp -year 2022 -month 01 -day 05
+
+Description
+---------------------------------------
+Returns an ISO 8601 formatted time stamp for the date 01/05/2022 with no time as hour and minutes parameter are not provided.
+
+.INPUTS
+System.int32, System.DateTime
+
+.OUTPUTS
+System.String
+
+.NOTES
+FunctionName : New-TimeStamp
+Created by   : Ryan McAvoy
+Date Coded   : 04/23/2022
+More info    : https://serialscripter.tech
+#>
 	[CmdletBinding()]
 	param
 	(
@@ -264,6 +520,44 @@ function New-TimeStamp
 
 function Get-HAStateHistory
 {
+<#
+.SYNOPSIS
+Get CPU info for a list of computers.
+.DESCRIPTION
+Returns an array of state changes in the past. Each object contains further details for the entities.
+The <timestamp> (YYYY-MM-DDThh:mm:ssTZD) is optional and defaults to 1 day before the time of the request. It determines the beginning of the period.
+Use the helper function New-TimeStamp to create a timestamp in the proper format.
+
+.PARAMETER start_time
+The time stamp in ISO 8601 format which determines the start of the state history period to return
+
+.PARAMETER end_time
+The time stamp in ISO 8601 format which determines the end of the state history period to return
+
+.PARAMETER entity_id
+Any valid entity id present in the connected Home Assistant. Filters the state history returned to only that of the entity provided.
+	
+.PARAMETER minimal_response
+Optional switch parameter to only return last_changed and state for states other than the first and last state (much faster).
+
+.PARAMETER no_attributes
+Optional switch parameter to skip returning attributes from the database (much faster).
+
+.PARAMETER significant_changes_only
+Optional switch parameter to only return significant state changes.
+
+.INPUTS
+System.String, System.Switch
+
+.OUTPUTS
+System.Management.Automation.PSCustomObject
+
+.NOTES
+FunctionName : Get-HAStateHistory
+Created by   : Ryan McAvoy
+Date Coded   : 04/23/2022
+More info    : https://serialscripter.tech
+#>
 	[CmdletBinding()]
 	param
 	(
@@ -276,11 +570,11 @@ function Get-HAStateHistory
 		[parameter(Mandatory = $false, HelpMessage = "Optiona entity id or array or entity ids to filter the state history queried.")]
 		[string[]]$entity_id,
 		[parameter(Mandatory = $false, HelpMessage = "Optional parameter to only return last_changed and state for states other than the first and last state (much faster).")]
-		[bool]$minimal_response = $false,
+		[switch]$minimal_response,
 		[parameter(Mandatory = $false, HelpMessage = "Optional paramater to skip returning attributes from the database (much faster).")]
-		[bool]$no_attributes = $false,
+		[switch]$no_attributes,
 		[parameter(Mandatory = $false, HelpMessage = "Optional paramater to only return significant state changes.")]
-		[bool]$significant_changes_only = $false
+		[switch]$significant_changes_only
 	)
 	
 	$Arguments = "?"
@@ -289,7 +583,7 @@ function Get-HAStateHistory
 	{
 		switch ($param) {
 			"end_time" {
-				$Arguments = $Arguments + "end_time=$end_time"
+				$Arguments = "$Arguments" + "end_time=$end_time"
 			}
 			"entity_id" {
 				if ($entity_id.Count -gt 1)
@@ -301,16 +595,16 @@ function Get-HAStateHistory
 					$entities = $entity_id
 				}
 				
-				$Arguments = $Arguments + "&filter_entity_id=$entities"				
+				$Arguments = "$Arguments" + "&filter_entity_id=$entities"				
 			}
 			"minimal_response" {
-				$Arguments = $Arguments + "&minimal_response"
+				$Arguments = "$Arguments" + "&minimal_response"
 			}
 			"no_attributes" {
-				$Arguments = $Arguments + "&no_attributes"
+				$Arguments = "$Arguments" + "&no_attributes"
 			}
 			"significant_changes_only" {
-				$Arguments = $Arguments + "&significant_changes_only"
+				$Arguments = "$Arguments" + "&significant_changes_only"
 			}
 		}
 	}
@@ -330,22 +624,76 @@ function Get-HAStateHistory
 	{
 		if ($Arguments)
 		{
-			Invoke-HARestMethod -RestMethod get -Endpoint "history/period" -Arguments $Arguments
+			try{
+				Invoke-HARestMethod -RestMethod get -Endpoint "history/period" -Arguments $Arguments -ErrorAction Stop | select -ExpandProperty SyncRoot
+			}
+			Catch
+			{
+				$Error[0]
+			}
+		
 		}
 		else
 		{
-			Invoke-HARestMethod -RestMethod get -Endpoint "history/period"
+			Try
+			{
+				Invoke-HARestMethod -RestMethod get -Endpoint "history/period" -ErrorAction Stop | select -ExpandProperty SyncRoot
+			}
+			Catch
+			{
+				$Error[0]
+			}
+		
 		}
 	}
 }
 
 function Get-HAErrorLog
 {
+<#
+.SYNOPSIS
+Gets all error logs from the connected Home Assistant
+
+.DESCRIPTION
+Retrieve all errors logged during the current session of Home Assistant as a plaintext response.
+
+.INPUTS
+System.String
+
+.OUTPUTS
+System.String
+
+.NOTES
+FunctionName : Get-HAErrorLog
+Created by   : Ryan McAvoy
+Date Coded   : 04/23/2022
+More info    : https://serialscripter.tech
+#>
 	Invoke-HARestMethod -RestMethod get -Endpoint "error_log"
 }
 
 function Get-HACameraProxy
 {
+<#
+.SYNOPSIS
+Returns the data (image) from the specified camera entity_id.
+
+.DESCRIPTION
+Function is currently not public because of a lack of understanding of the data that is returned and lack of understanding
+how to make the information returned useful.
+	
+.INPUTS
+System.Sting
+
+.OUTPUTS
+Bytes I think? I'm not entirely sure
+
+.NOTES
+FunctionName : Get-HACameraProxy
+Created by   : Ryan McAvoy
+Date Coded   : 04/23/2022
+More info    : https://serialscript.tech
+#>
 	param
 	(
 		[parameter(Mandatory = $true, HelpMessage = "Entity id of the camera to return image data from")]
@@ -357,6 +705,15 @@ function Get-HACameraProxy
 
 function Invoke-HACheck
 {
+<#
+.SYNOPSIS
+Interal helper function error checking
+	
+FunctionName : Invoke-HACheck
+Created by   : Ryan McAvoy
+Date Coded   : 04/23/2022
+More info    : https://serialscripter.tech
+#>
 	if (!$ha_api_configured)
 	{
 		$false; Break
@@ -376,6 +733,16 @@ function Invoke-HACheck
 
 function Invoke-HARestMethod
 {
+<#
+.SYNOPSIS
+Interal helper function which all REST queries are called through
+	
+.NOTES
+FunctionName : Invoke-HARestMethod
+Created by   : Ryan McAvoy
+Date Coded   : 04/23/2022
+More info    : https://serialscripter.tech
+#>
 	param
 	(
 		[parameter(Mandatory = $true)]
@@ -388,6 +755,11 @@ function Invoke-HARestMethod
 		[parameter(Mandatory = $false)]
 		[string]$Body
 	)
+	
+	if (!$ha_api_configured)
+	{
+		Write-Warning "No active Home Assistant session found. Run New-HASession before running any other Home Assistant command"; Throw
+	}
 	
 	try
 	{
@@ -450,6 +822,25 @@ function Invoke-HARestMethod
 
 function Get-HAServiceDomain
 {
+<#
+.SYNOPSIS
+Get domains for connect Home Assistant services
+	
+.DESCRIPTION
+Gets and returns all valid service domains for the connected Home Assistant
+
+.EXAMPLE
+Get-HAServiceDomain
+
+.OUTPUTS
+System.Management.Automation.PSCustomObject
+
+.NOTES
+FunctionName : 
+Created by   : Ryan McAvoy
+Date Coded   : 04/23/2022
+More info    : https://serialscripter.tech
+#>
 	$Services = Get-HAService
 	
 	Return $($Services | select-object -ExpandProperty domain)
@@ -457,6 +848,48 @@ function Get-HAServiceDomain
 
 function Set-HAState
 {
+<#
+.SYNOPSIS
+Sets the state of the given entity id in the connected Home Assistant
+
+.DESCRIPTION
+Sets the state of the given entity id to the state given at runtime. Use this function with caution as the state provided is not 
+validated by Home Assitant in anyway, meaning the state can be set to anything.
+
+.PARAMETER enitty_id
+Any entity id present in the connected Home Assistant
+	
+.PARAMETER state
+The value to set for the state of the entity id given. Can be any value.
+
+.PARAMETER attributes
+Optional parameter for setting attributes of the given entity id in PSObject format
+
+.EXAMPLE
+$attributes = @{
+	next_rising = "2016-05-31T03:39:14+00:00"
+	next_setting = "2016-05-31T19:16:42+00:00"
+}
+Set-HAState -entity_id 'sun.sun' -state "below_horizon" -attributes $attributes
+
+Description
+---------------------------------------
+Sets the sun entity to the state 'below_horizon' with the attributes 'next_rising' equal to "2016-05-31T03:39:14+00:00" and 
+'next_setting' equal to "2016-05-31T19:16:42+00:00"
+
+.INPUTS
+System.String, System.Management.Automation.PSCustomObject
+
+.OUTPUTS
+System.Management.Automation.PSCustomObject
+
+.NOTES
+FunctionName : Set-HAState
+Created by   : Ryan McAvoy
+Date Coded   : 04/23/2022
+More info    : https://serialscript.tech
+#>
+	
 	[CmdletBinding(ConfirmImpact = 'High',
 				   SupportsShouldProcess = $true)]
 	param
@@ -479,7 +912,7 @@ function Set-HAState
 			} | ConvertTo-Json
 			
 			Write-Output -InputObject "Invoking post rest method on host $ha_api_url with endpoint `"states/$entity_id`" with the following body data:"
-			Return $Body
+			Write-Output $Body
 		}
 		else
 		{
@@ -488,9 +921,8 @@ function Set-HAState
 			} | ConvertTo-Json
 			
 			Write-Output -InputObject "Invoking post rest method on host $ha_api_url with endpoint `"states/$entity_id`" with the following body data:"
-			Return $Body
+			Write-Output $Body
 		}
-		Write-Output -InputObject ""
 	}
 	
 	if ($attributes)
@@ -517,6 +949,40 @@ function Set-HAState
 
 function Test-HATemplate
 {
+<#
+.SYNOPSIS
+Test the validity of a Home Assistant template.
+	
+.DESCRIPTION
+Utilize Home Assistant REST API to test the validity of a Home Assistant template. If the template if valid it returns the value of the given template.
+See HA docs on templating for more info: https://www.home-assistant.io/docs/configuration/templating
+	
+.PARAMETER Template
+The template to test against Home Assistant. Ensure any quotes that must be included in the template are prefaced with an escape character.
+
+.EXAMPLE
+For the provided Home Assistant template: '{"template": "It is {{ now() }}!"}'
+You would need to enter it as follows: "`'{`"template`": `"It is {{ now() }}!`"}`'"
+
+.EXAMPLE
+Test-HATemplate -template "`'{`"template`": `"It is {{ now() }}!`"}`'"
+
+Description
+---------------------------------------
+Test the validity of the provided template. This example at the time of writing returned: {"template": "It is 2022-04-23 14:48:30.718086-04:00!"}
+
+.INPUTS
+System.String
+
+.OUTPUTS
+System.String
+
+.NOTES
+FunctionName : Test-HATemplate
+Created by   : Ryan McAvoy
+Date Coded   : 04/23/2022
+More info    : https://serialscript.tech
+#>
 	param
 	(
 		[parameter(Mandatory = $true)]
@@ -532,6 +998,26 @@ function Test-HATemplate
 
 function Get-HAEntityID
 {
+<#
+.SYNOPSIS
+Get all entities in the connected Home Assistant session
+
+.DESCRIPTION
+Gets list of all entity ids and all entity domains.
+
+.EXAMPLE
+Get-HAEntityID
+
+.OUTPUTS
+System.Management.Automation.PSCustomObject
+
+.NOTES
+FunctionName : Get-HAEntityID
+Created by   : Ryan McAvoy
+Date Coded   : 04/23/2022
+More info    : https://serialscripter.tech
+#>
+	
 	$allEntities = $(Get-HAState) | Select-Object -ExpandProperty entity_id
 	$returnEntities = @()
 	
