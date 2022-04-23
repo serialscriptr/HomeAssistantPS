@@ -16,3 +16,9 @@ See Home Assistant REST API docs here: https://developers.home-assistant.io/docs
 - Update majority of functions to support -whatif parameter
 - (Maybe) Provide specific functions for various home assistant service domains
 - (If possible) find a way to make Get-HACameraProxy useful within powershell
+
+# Using the module
+You can download the module script and execute it to load the modules into memory on the fly by doing the following:
+> (new-object Net.WebClient).DownloadString('https://raw.githubusercontent.com/serialscriptr/HomeAssistantPS/master/HomeAssistant/HomeAssistant.psm1') | iex
+
+You can also install the module to your computer by downloading a copy of the repo and copying the HomeAssistant folder to the "$HOME\Documents\PowerShell\Modules" folder onm your computer
