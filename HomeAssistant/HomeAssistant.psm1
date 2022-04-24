@@ -383,30 +383,67 @@ More info    : https://serialscripter.tech
 		[String]$end_time
 	)
 	
-	
-	$JoinedParams = $($PSBoundParameters.keys | Sort-Object) -join ""
-	switch ($JoinedParams)
+	if ($end_time -or $entity_id)
 	{
-		"end_timeentity_idstart_time" {
-			Invoke-HARestMethod -RestMethod get -Endpoint "logbook/$start_time" -Arguments "?end_time=$end_time&entity=$entity_id"
+		$Arguments = '?'
+	}
+	
+	foreach ($Param in $($PSBoundParameters.Keys | Where-Object {$_ -ine "start_time"}))
+	{
+		switch ($Param)
+		{
+			"entity_id" {
+				if ($Arguments -eq '?')
+				{
+					$Arguments = "$Arguments" + "entity=$entity_id"
+					Write-Verbose "args equal $Arguments"
+				}
+				else
+				{
+					$Arguments = "$Arguments" + "&entity=$entity_id"
+					Write-Verbose "args equal $Arguments"
+				}
+				
+			}
+			"end_time" {
+				if ($Arguments -eq '?')
+				{
+					$Arguments = "$Arguments" + "end_time=$end_time"
+					Write-Verbose "args equal $Arguments"
+				}
+				else
+				{
+					$Arguments = "$Arguments" + "&end_time=$end_time"
+					Write-Verbose "args equal $Arguments"
+				}
+			}
 		}
-		"end_timestart_time" {
-			Invoke-HARestMethod -RestMethod get -Endpoint "logbook/$start_time" -Arguments "?end_time=$end_time"
+	}
+	
+	if ($start_time)
+	{
+		if ($Arguments)
+		{
+			Write-Verbose "Invoking get REST method on endpoint `"logbook/$start_time`" with args $Arguments"
+			Invoke-HARestMethod -RestMethod get -Endpoint "logbook/$start_time" -Arguments $Arguments
 		}
-		"entity_idstart_time" {
-			Invoke-HARestMethod -RestMethod get -Endpoint "logbook/$start_time" -Arguments "?entity=$entity_id"
-		}
-		"end_timeentity_id" {
-			Invoke-HARestMethod -RestMethod get -Endpoint "logbook" -Arguments "?end_time=$end_time&entity=$entity_id"
-		}
-		"end_time" {
-			Invoke-HARestMethod -RestMethod get -Endpoint "logbook" -Arguments "?end_time=$end_time"
-		}
-		"start_time" {
+		else
+		{
+			Write-Verbose "Invoking get REST method on endpoint `"logbook/$start_time`""
 			Invoke-HARestMethod -RestMethod get -Endpoint "logbook/$start_time"
 		}
-		"entity_id" {
-			Invoke-HARestMethod -RestMethod get -Endpoint "logbook" -Arguments "?entity=$entity_id"
+	}
+	else
+	{
+		if ($Arguments)
+		{
+			Write-Verbose "Invoking get REST method on endpoint `"logbook`" with args $Arguments"
+			Invoke-HARestMethod -RestMethod get -Endpoint "logbook" -Arguments $Arguments
+		}
+		else
+		{
+			Write-Verbose "Invoking get REST method on endpoint `"logbook`""
+			Invoke-HARestMethod -RestMethod get -Endpoint "logbook"
 		}
 	}
 }
@@ -577,34 +614,94 @@ More info    : https://serialscripter.tech
 		[switch]$significant_changes_only
 	)
 	
-	$Arguments = "?"
+	if ($entity_id -or $end_time -or $minimal_response -or $no_attributes -or $significant_changes_only)
+	{
+		Write-Verbose "One or more parameters provided shall be passed as args"
+		$Arguments = "?"
+	}
+	else
+	{
+		Write-Verbose "No parameters provided that would be passed as args. This will return a lot of data and take some time, consider using on of the three switch parameters."	
+	}
 	
 	forEach ($param in $($PSBoundParameters.Keys | where {$_ -ine "start_time"}))
 	{
 		switch ($param) {
 			"end_time" {
-				$Arguments = "$Arguments" + "end_time=$end_time"
+				if ($Arguments -eq "?")
+				{
+					$Arguments = "$Arguments" + "end_time=$end_time"
+					Write-Verbose "Args equal $Arguments"
+				}
+				else
+				{
+					$Arguments = "$Arguments" + "&end_time=$end_time"
+					Write-Verbose "Args equal $Arguments"
+				}
+				
 			}
 			"entity_id" {
 				if ($entity_id.Count -gt 1)
 				{
+					Write-Verbose "Multiple entities provides, putting them in corret format now"
 					$entities = $entity_id -join ","
+					Write-Verbose "entities equals $entities"
 				}
 				else
 				{
+					Write-Verbose "Only one entity provided so it shall remain in the format provided"
 					$entities = $entity_id
 				}
 				
-				$Arguments = "$Arguments" + "&filter_entity_id=$entities"				
+				if ($Arguments -eq "?")
+				{
+					$Arguments = "$Arguments" + "filter_entity_id=$entities"
+					Write-Verbose "Args equal $Arguments"
+				}
+				else
+				{
+					$Arguments = "$Arguments" + "&filter_entity_id=$entities"
+					Write-Verbose "Args equal $Arguments"
+				}
+				
 			}
 			"minimal_response" {
-				$Arguments = "$Arguments" + "&minimal_response"
+				if ($Arguments -eq "?")
+				{
+					$Arguments = "$Arguments" + "minimal_response"
+					Write-Verbose "Args equal $Arguments"
+				}
+				Else
+				{
+					$Arguments = "$Arguments" + "&minimal_response"
+					Write-Verbose "Args equal $Arguments"
+				}
 			}
 			"no_attributes" {
-				$Arguments = "$Arguments" + "&no_attributes"
+				if ($Arguments -eq "?")
+				{
+					$Arguments = "$Arguments" + "no_attributes"
+					Write-Verbose "Args equal $Arguments"
+				}
+				Else
+				{
+					$Arguments = "$Arguments" + "&no_attributes"
+					Write-Verbose "Args equal $Arguments"
+					
+				}
+				
 			}
 			"significant_changes_only" {
-				$Arguments = "$Arguments" + "&significant_changes_only"
+				if ($Arguments -eq "?")
+				{
+					$Arguments = "$Arguments" + "significant_changes_only"
+					Write-Verbose "Args equal $Arguments"
+				}
+				Else
+				{
+					$Arguments = "$Arguments" + "&significant_changes_only"
+					Write-Verbose "Args equal $Arguments"
+				}
 			}
 		}
 	}
@@ -613,37 +710,54 @@ More info    : https://serialscripter.tech
 	{
 		if ($Arguments)
 		{
-			Invoke-HARestMethod -RestMethod get -Endpoint "history/period/$start_time" -Arguments $Arguments
+			try
+			{
+				Write-Verbose "Invoking get REST method on endpoint `"history/period/$start_time`" with the following args $Arguments"
+				Invoke-HARestMethod -RestMethod get -Endpoint "history/period/$start_time" -Arguments $Arguments | Select-Object -ExpandProperty SyncRoot
+			}
+			catch
+			{
+				$Error[0]
+			}			
 		}
 		else
 		{
-			Invoke-HARestMethod -RestMethod get -Endpoint "history/period/$start_time"
+			try
+			{
+				Write-Verbose "Invoking get REST method on endpoint `"history/period/$start_time`""
+				Invoke-HARestMethod -RestMethod get -Endpoint "history/period/$start_time" | Select-Object -ExpandProperty SyncRoot
+			}
+			catch
+			{
+				$Error[0]
+			}
 		}
 	}
 	else
 	{
 		if ($Arguments)
 		{
-			try{
-				Invoke-HARestMethod -RestMethod get -Endpoint "history/period" -Arguments $Arguments -ErrorAction Stop | select -ExpandProperty SyncRoot
+			try
+			{
+				Write-Verbose "Invoking get REST method on endpoint `"history`" with the following args $Arguments"
+				Invoke-HARestMethod -RestMethod get -Endpoint "history/period" -Arguments $Arguments  | Select-Object -ExpandProperty SyncRoot
 			}
 			Catch
 			{
 				$Error[0]
-			}
-		
+			}			
 		}
 		else
 		{
 			Try
 			{
-				Invoke-HARestMethod -RestMethod get -Endpoint "history/period" -ErrorAction Stop | select -ExpandProperty SyncRoot
+				Write-Verbose "Invoking get REST method on endpoint `"history`""
+				Invoke-HARestMethod -RestMethod get -Endpoint "history/period" | Select-Object -ExpandProperty SyncRoot
 			}
 			Catch
 			{
 				$Error[0]
-			}
-		
+			}			
 		}
 	}
 }
