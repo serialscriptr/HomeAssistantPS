@@ -12,6 +12,7 @@ See Home Assistant REST API docs here: https://developers.home-assistant.io/docs
 - Create a function that pulls all entity ids for the given service domain
 - Create function for events/<event_type>
 - Update some of the functions to default to asking for confirmation before running
+- (if possible) dynamically ask for confirmation based on a lack of specific parameters. Ex: Get-HAStateHistory returns a lot of data and takes a long time compared to other functions in the module. 
 - Update all functions to better support -verbose parameter
 - Update majority of functions to support -whatif parameter
 - (Maybe) Provide specific functions for various home assistant service domains
