@@ -21,6 +21,7 @@ See Home Assistant REST API docs here: https://developers.home-assistant.io/docs
 
 # Using the module
 You can download the module script and execute it to load the modules into memory on the fly by doing the following:
-> (new-object Net.WebClient).DownloadString('https://raw.githubusercontent.com/serialscriptr/HomeAssistantPS/master/HomeAssistant/HomeAssistant.psm1') | iex
+> (new-object Net.WebClient).DownloadString('https://raw.githubusercontent.com/serialscriptr/HomeAssistantPS/master/HomeAssistant/0.1.0/HomeAssistant.psm1') | iex
+Note that the above will throw an error because of the inclusion of 'Export-ModuleMember.' This can be ignored, just know that private fucntions of the module will also be exposed.
 
 You can also install the module to your computer by downloading a copy of the repo and copying the HomeAssistant folder to the "$HOME\Documents\PowerShell\Modules" folder on your computer
