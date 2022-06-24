@@ -29,6 +29,8 @@
 	04/23/2022 - Ryan McAvoy - Changed parameters from being all mandatory. Port defaults to 8123. UseSSL parameter added. Changed Write-host to Write-output
 							added registration of auto completers for entity id parameters in module functions. Added parameter validate scripts. Changed
 							from setting various variables as global and instead made them local to the script for privacy reasons.
+	05/08/2022 - Ryan McAvoy - Removed SSL option, Home Assistant REST api does not support. Added autocomplete for service domains
+	06/24/2022 - Ryan McAvoy - Changed sensitive script variables to the private variable scope
 	#>
 	Param (
 		[Parameter(Mandatory = $true, HelpMessage = "Local IP address of the home assistant instance to connect to or Homeassistant.local. Example: 192.168.1.2")]
@@ -40,22 +42,16 @@
 		[string]$token
 	)
 	
-	$Script:ha_api_headers = @{ Authorization = "Bearer $token" }
-	$Script:ha_api_url = "http://$($ip):$($port)/api/"
+	Set-Variable -Name "ha_api_headers" -Value @{ Authorization = "Bearer $token" } -Visibility Private -Scope Script -Force
+	Set-Variable -Name "ha_api_url" -Value "http://$($ip):$($port)/api/" -Visibility Private -Scope Script -Force
 
 	try
 	{
 		Write-Verbose "Attempting to connect to $ha_api_url"
 		Invoke-RestMethod -uri $ha_api_url -Method GET -Headers $ha_api_headers -SessionVariable ha_session
-		$return = @{
-			help_message    = "Pass this to the session parameter of other functions"
-			ha_session	    = $ha_session
-			ha_api_url	    = $ha_api_url
-			ha_all_entities = $ha_all_entities
-		}
 		Write-Verbose "Checking some environment information..."
-		$Script:ha_all_entities = Get-HAEntityID
-		$Script:ha_all_services = Get-HAService
+		Set-Variable -Name "ha_all_entities" -Value $(Get-HAEntityID) -Visibility Private -Scope Script -Force
+		Set-Variable -Name "ha_all_services" -Value $(Get-HAService) -Visibility Private -Scope Script -Force
 		Write-Verbose "Setting up autocomplete helpers..."
 		$entity_autocomplete = {
 			param ($commandName,$parameterName,	$stringMatch)
@@ -75,7 +71,7 @@
 			}
 		}
 		Register-ArgumentCompleter -CommandName Get-HALogBook, Invoke-HAService, Get-HAState, Get-HAStateHistory, Set-HAState -ParameterName entity_id -ScriptBlock $entity_autocomplete
-		Register-ArgumentCompleter -CommandName Invoke-HAService -ParameterName ServiceDomain -ScriptBlock $servicedomain_autocomplete
+		Register-ArgumentCompleter -CommandName Invoke-HAService, Get-HAServiceEntity -ParameterName ServiceDomain -ScriptBlock $servicedomain_autocomplete
 		write-Verbose "Connection to Home-Assistant API succeeded!"
 		
 	}
@@ -1143,6 +1139,18 @@ function Get-HAEntityID
 	Return $($returnEntities | Sort-Object -Property domain)
 }
 
+function Get-HAServiceEntity
+{
+	param
+	(
+		[parameter(Mandatory = $true)]
+		[String]$ServiceDomain
+	)
+	
+	Get-HAEntityID | Where-Object {
+		$_.domain -imatch $ServiceDomain
+	} | Select-Object -ExpandProperty entity_id
+}
 $PublicFunctions = @("Test-HATemplate",
 	"Set-HAState",
 	"Get-HAServiceDomain",
@@ -1158,7 +1166,8 @@ $PublicFunctions = @("Test-HATemplate",
 	"New-HASession",
 	"Invoke-HAService",
 	"Get-HAConfig",
-	"Get-HAState", 
-	"Get-HAEntityID")
+	"Get-HAState",
+	"Get-HAEntityID",
+	"Get-HAServiceEntity")
 
 Export-ModuleMember -Function $PublicFunctions
