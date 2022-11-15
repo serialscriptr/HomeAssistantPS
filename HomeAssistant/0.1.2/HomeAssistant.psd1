@@ -19,7 +19,7 @@
 	RootModule = 'HomeAssistant.psm1'
 	
 	# Version number of this module.
-	ModuleVersion = '0.1.0.0'
+	ModuleVersion = '0.1.2'
 	
 	# ID used to uniquely identify this module
 	GUID = 'ddd80b7d-1804-4dc4-b2b1-ac4080b28ff2'

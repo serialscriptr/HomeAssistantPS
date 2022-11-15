@@ -1,4 +1,5 @@
-﻿Function New-HASession
+﻿# New
+Function New-HASession
 {
 	<#
 	.SYNOPSIS
@@ -44,17 +45,19 @@
 	
 	Set-Variable -Name "ha_api_headers" -Value @{ Authorization = "Bearer $token" } -Visibility Private -Scope Script -Force
 	Set-Variable -Name "ha_api_url" -Value "http://$($ip):$($port)/api/" -Visibility Private -Scope Script -Force
-
+	
 	try
 	{
 		Write-Verbose "Attempting to connect to $ha_api_url"
-		Invoke-RestMethod -uri $ha_api_url -Method GET -Headers $ha_api_headers -SessionVariable ha_session
+		Invoke-RestMethod -uri $ha_api_url -Method GET -Headers $ha_api_headers -SessionVariable ha_session -ErrorAction Stop | Select-Object -ExpandProperty message
 		Write-Verbose "Checking some environment information..."
 		Set-Variable -Name "ha_all_entities" -Value $(Get-HAEntityID) -Visibility Private -Scope Script -Force
 		Set-Variable -Name "ha_all_services" -Value $(Get-HAService) -Visibility Private -Scope Script -Force
 		Write-Verbose "Setting up autocomplete helpers..."
 		$entity_autocomplete = {
-			param ($commandName,$parameterName,	$stringMatch)
+			param ($commandName,
+				$parameterName,
+				$stringMatch)
 			$ha_all_entities.entity_id | Where-Object {
 				$_ -like "$stringMatch*"
 			} | ForEach-Object {
@@ -63,7 +66,9 @@
 			
 		}
 		$servicedomain_autocomplete = {
-			param ($commandName,$parameterName,$stringMatch)
+			param ($commandName,
+				$parameterName,
+				$stringMatch)
 			$ha_all_services.domain | Where-Object {
 				$_ -like "$stringMatch*"
 			} | ForEach-Object {
@@ -71,9 +76,7 @@
 			}
 		}
 		Register-ArgumentCompleter -CommandName Get-HALogBook, Invoke-HAService, Get-HAState, Get-HAStateHistory, Set-HAState -ParameterName entity_id -ScriptBlock $entity_autocomplete
-		Register-ArgumentCompleter -CommandName Invoke-HAService, Get-HAServiceEntity -ParameterName ServiceDomain -ScriptBlock $servicedomain_autocomplete
-		write-Verbose "Connection to Home-Assistant API succeeded!"
-		
+		Register-ArgumentCompleter -CommandName Invoke-HAService, Get-HAServiceEntity -ParameterName ServiceDomain -ScriptBlock $servicedomain_autocomplete		
 	}
 	catch
 	{
@@ -92,361 +95,8 @@
 		Throw
 	}
 	
-	Write-Output "Connection successful"
+	Write-Output "Connection to Home-Assistant API succeeded!"
 	Return $return.message
-}
-
-Function Invoke-HAService
-{
-	<#
-	.SYNOPSIS
-	Calls a service within a specific domain.
-		
-	.DESCRIPTION
-	Triggers the service provided of the service domain for the connected Home Assistant
-		
-	.PARAMETER service
-	The desired service to call for the connected Home Assistant
-		
-	.PARAMETER serviceDomain
-	Optional parameter to specify the domain of the service being called
-		
-	.PARAMETER entity_id
-	Any valid entity id present in the connected Home Assistant
-		
-	.INPUTS
-	System.String
-
-	.OUTPUTS
-	System.Management.Automation.PSCustomObject
-
-	.NOTES
-	FunctionName : Invoke-HAService
-	Created by   : Flemming Sørvollen Skaret
-	Original Release Date : 17.03.2019
-	Original Project : https://github.com/flemmingss/
-
-	.CHANGES:
-	04/23/2022 - Ryan McAvoy - Changed parameters from being all mandatory. Added service validation check. Change to use Invoke-HARestMethod
-	#>
-	[CmdletBinding()]
-	param
-	(
-		[parameter(Mandatory = $false)]
-		[string]$ServiceDomain,
-		[parameter(Mandatory = $true)]
-		[string]$Service,
-		[parameter(Mandatory = $false)]
-		[string]$entity_id
-	)
-	
-	if ($ServiceDomain)
-	{
-		$ValidServices = Get-HAServiceDomain
-		
-		if ($ValidServices.domain -icontains $ServiceDomain)
-		{
-			Write-Warning "Provided service domain is not valid for this home assistant instance."; throw
-		}
-		else
-		{
-			$MatchingDomainServices = $ValidServices | where-object { $_.domain -ieq $ServiceDomain } | select-object -ExpandProperty services
-			if ($MatchingDomainServices -inotcontains $Service)
-			{
-				Write-Warning "Provided service method is not a valid method for the provided service domain."; throw
-			}
-		}
-	}
-	else
-	{
-		$ServiceDomain = $Service -replace ".*\."
-	}
-	
-	if ($entity_id)
-	{
-		$Body = @{
-			entity_id = $entity_id
-		} | ConvertTo-Json
-		Invoke-HARestMethod -RestMethod post -Endpoint "services/$ServiceDomain/$Service" -Body $Body
-	}
-	else
-	{
-		Invoke-HARestMethod -RestMethod post -Endpoint "services/$ServiceDomain/$Service"
-	}
-}
-
-function Get-HAConfig
-{
-	<#
-	.SYNOPSIS
-	Returns the current configuration as a psobject
-		
-	.DESCRIPTION
-	Queries and retuns the current connected Home Assistant configuration. Note this is different from the configuration.yaml file.
-
-	.OUTPUTS
-	System.Management.Automation.PSCustomObject
-
-	.NOTES
-	FunctionName : Get-HAConfig
-	Created by   : Ryan McAvoy
-	Date Coded   : 04/23/2022
-	More info    : https://serialscripter.tech
-	#>
-	Invoke-HARestMethod -RestMethod get -Endpoint "config"
-}
-
-function Get-HAState
-{
-	<#
-	.SYNOPSIS
-	Returns a psobject of state objects.
-		
-	.DESCRIPTION
-	Queries and returns the information on entity states for the connected Home Assistant.
-
-	.PARAMETER entity_id
-	Any valid entity id present in the connected Home Assistant. Used to filter the returned states by the provided entity id.
-		
-	.EXAMPLE
-	Get-HAState
-
-	Description
-	---------------------------------------
-	Returns all current entity id states
-
-	.INPUTS
-	System.String
-
-	.OUTPUTS
-	System.Management.Automation.PSCustomObject
-
-	.NOTES
-	FunctionName : Get-HAState
-	Created by   : Ryan McAvoy
-	Date Coded   : 04/23/2022
-	More info    : https://serialscripter.tech
-	#>
-	[CmdletBinding()]
-	Param (
-		[Parameter(Mandatory = $false, ValueFromPipelineByPropertyName = $true)]
-		[string]$entity_id
-	)
-	
-	if ($entity_id)
-	{
-		Invoke-HARestMethod -RestMethod get -Endpoint "states/$entity_id"
-	}
-	else
-	{
-		Invoke-HARestMethod -RestMethod get -Endpoint "states"
-	}
-}
-
-Function Get-HAService
-{
-	<#
-	.SYNOPSIS
-	Returns a psobject of service objects.
-		
-	.DESCRIPTION
-	Returns all service domains for the connected Home Assistant and includes valid services that can be called
-	on the service domain.
-
-	.OUTPUTS
-	System.Management.Automation.PSCustomObject
-
-	.NOTES
-	FunctionName : Get-HAService
-	Created by   : Ryan McAvoy
-	Date Coded   : 04/23/2022
-	More info    : https://serialscripter.tech
-	#>
-	$($(Invoke-HARestMethod -RestMethod get -Endpoint "services") | Sort-Object -Property domain )
-}
-
-Function Invoke-HAConfigCheck
-{
-	<#
-	.SYNOPSIS
-	Trigger a check of configuration.yaml
-
-	.DESCRIPTION
-	Triggers a config check for the connected Home Assistant. If successful the psobject returned will have a result
-	vaule of 'valid'
-
-	.INPUTS
-	System.String
-
-	.OUTPUTS
-	System.Management.Automation.PSCustomObject
-
-	.NOTES
-	FunctionName : Invoke-HAConfigCheck
-	Created by   : Ryan McAvoy
-	Date Coded   : 04/23/2022
-	More info    : https://serialscripter.tech
-	#>
-	Invoke-HARestMethod -RestMethod post -Endpoint "config/core/check_config"
-}
-
-Function Get-HAEvent
-{
-	<#
-	.SYNOPSIS
-	Returns an array of event objects
-		
-	.DESCRIPTION
-	Queries and returns event object names and listener counts for each
-		
-	.PARAMETER sortby
-	Optional parameter to change how the returned information is sorted, by event or listerner count
-		
-	.INPUTS
-	System.String
-
-	.OUTPUTS
-	System.Management.Automation.PSCustomObject
-
-	.NOTES
-	FunctionName : Get-HAEvent
-	Created by   : Ryan McAvoy
-	Date Coded   : 04/23/2022
-	More info    : https://serialscripter.tech
-	#>
-	param
-	(
-		[parameter(Mandatory = $false)]
-		[ValidateSet("event", "listener_count")]
-		$SortBy = "event"
-	)
-	switch ($SortBy) {
-		"event" {
-			$(Invoke-HARestMethod -RestMethod get -Endpoint "events") | Sort-Object -Property event
-		}
-		"listener_count" {
-			$(Invoke-HARestMethod -RestMethod get -Endpoint "events") | Sort-Object -Property listener_count
-		}
-		default {
-			$(Invoke-HARestMethod -RestMethod get -Endpoint "events") | Sort-Object -Property event
-		}
-	}
-}
-
-Function Get-HALogBook
-{
-	<#
-	.SYNOPSIS
-	Returns an array of logbook entries.
-		
-	.DESCRIPTION
-	Queries and returns the logbook entires based on the given parameters (if any) from the connected Home Assistant
-		
-	.PARAMETER entity_id
-	Any valid entity id present in the connect Home Assistant to filter the logbook entires to
-		
-	.PARAMETER start_time
-	An ISO 8601 formatted time stamp that determines the start time of the logbook entires returned.
-	Defaults to one day before the current day.
-		
-	.PARAMETER end_time
-	An ISO 8601 formatted time stamp that determines the end time of the logbook entries returned
-
-	.EXAMPLE
-	Get-HALogBook -entity_id $entity
-
-	Description
-	---------------------------------------
-	Returns logbook entries for the entity_id provided within the last 24 hours as no start time is provided.
-
-	.INPUTS
-	System.String
-
-	.OUTPUTS
-	System.String
-
-	.NOTES
-	FunctionName : Get-HALogbook
-	Created by   : Ryan McAvoy
-	Date Coded   : 04/23/2022
-	More info    : https://serialscripter.tech
-	#>
-	[CmdletBinding()]
-	param
-	(
-		[parameter(Mandatory = $false, ValueFromPipelineByPropertyName = $true, HelpMessage = "Filter logbook entries specific to the entity id provided")]
-		[String]$entity_id,
-		[parameter(Mandatory = $false, HelpMessage = "Optional timestamp in ISO 8601 format (YYYY-MM-DDThh:mm:ssTZD) that determines the start period of the logbook search.")]
-		[ValidateScript({ $_ -match "^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?(([+-]\d\d:\d\d)|Z)?$" })]
-		[String]$start_time,
-		[parameter(Mandatory = $false, HelpMessage = "Optional timestamp ISO 8601 format (YYYY-MM-DDThh:mm:ssTZD) that determines the end period of the logbook search.")]
-		[ValidateScript({ $_ -match "^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?(([+-]\d\d:\d\d)|Z)?$" })]
-		[String]$end_time
-	)
-	
-	if ($end_time -or $entity_id)
-	{
-		$Arguments = '?'
-	}
-	
-	foreach ($Param in $($PSBoundParameters.Keys | Where-Object {$_ -ine "start_time"}))
-	{
-		switch ($Param)
-		{
-			"entity_id" {
-				if ($Arguments -eq '?')
-				{
-					$Arguments = "$Arguments" + "entity=$entity_id"
-					Write-Verbose "args equal $Arguments"
-				}
-				else
-				{
-					$Arguments = "$Arguments" + "&entity=$entity_id"
-					Write-Verbose "args equal $Arguments"
-				}
-				
-			}
-			"end_time" {
-				if ($Arguments -eq '?')
-				{
-					$Arguments = "$Arguments" + "end_time=$end_time"
-					Write-Verbose "args equal $Arguments"
-				}
-				else
-				{
-					$Arguments = "$Arguments" + "&end_time=$end_time"
-					Write-Verbose "args equal $Arguments"
-				}
-			}
-		}
-	}
-	
-	if ($start_time)
-	{
-		if ($Arguments)
-		{
-			Write-Verbose "Invoking get REST method on endpoint `"logbook/$start_time`" with args $Arguments"
-			Invoke-HARestMethod -RestMethod get -Endpoint "logbook/$start_time" -Arguments $Arguments
-		}
-		else
-		{
-			Write-Verbose "Invoking get REST method on endpoint `"logbook/$start_time`""
-			Invoke-HARestMethod -RestMethod get -Endpoint "logbook/$start_time"
-		}
-	}
-	else
-	{
-		if ($Arguments)
-		{
-			Write-Verbose "Invoking get REST method on endpoint `"logbook`" with args $Arguments"
-			Invoke-HARestMethod -RestMethod get -Endpoint "logbook" -Arguments $Arguments
-		}
-		else
-		{
-			Write-Verbose "Invoking get REST method on endpoint `"logbook`""
-			Invoke-HARestMethod -RestMethod get -Endpoint "logbook"
-		}
-	}
 }
 
 function New-TimeStamp
@@ -558,6 +208,257 @@ function New-TimeStamp
 	}
 }
 
+# Get
+function Get-HAConfig
+{
+	<#
+	.SYNOPSIS
+	Returns the current configuration as a psobject
+		
+	.DESCRIPTION
+	Queries and retuns the current connected Home Assistant configuration. Note this is different from the configuration.yaml file.
+
+	.OUTPUTS
+	System.Management.Automation.PSCustomObject
+
+	.NOTES
+	FunctionName : Get-HAConfig
+	Created by   : Ryan McAvoy
+	Date Coded   : 04/23/2022
+	More info    : https://serialscripter.tech
+	#>
+	Invoke-HARestMethod -RestMethod get -Endpoint "config"
+}
+
+function Get-HAState
+{
+	<#
+	.SYNOPSIS
+	Returns a psobject of state objects.
+		
+	.DESCRIPTION
+	Queries and returns the information on entity states for the connected Home Assistant.
+
+	.PARAMETER entity_id
+	Any valid entity id present in the connected Home Assistant. Used to filter the returned states by the provided entity id.
+		
+	.EXAMPLE
+	Get-HAState
+
+	Description
+	---------------------------------------
+	Returns all current entity id states
+
+	.INPUTS
+	System.String
+
+	.OUTPUTS
+	System.Management.Automation.PSCustomObject
+
+	.NOTES
+	FunctionName : Get-HAState
+	Created by   : Ryan McAvoy
+	Date Coded   : 04/23/2022
+	More info    : https://serialscripter.tech
+	#>
+	[CmdletBinding()]
+	Param (
+		[Parameter(Mandatory = $false, ValueFromPipelineByPropertyName = $true)]
+		[string]$entity_id
+	)
+	
+	if ($entity_id)
+	{
+		Invoke-HARestMethod -RestMethod get -Endpoint "states/$entity_id"
+	}
+	else
+	{
+		Invoke-HARestMethod -RestMethod get -Endpoint "states"
+	}
+}
+
+Function Get-HAService
+{
+	<#
+	.SYNOPSIS
+	Returns a psobject of service objects.
+		
+	.DESCRIPTION
+	Returns all service domains for the connected Home Assistant and includes valid services that can be called
+	on the service domain.
+
+	.OUTPUTS
+	System.Management.Automation.PSCustomObject
+
+	.NOTES
+	FunctionName : Get-HAService
+	Created by   : Ryan McAvoy
+	Date Coded   : 04/23/2022
+	More info    : https://serialscripter.tech
+	#>
+	$($(Invoke-HARestMethod -RestMethod get -Endpoint "services") | Sort-Object -Property domain)
+}
+
+Function Get-HAEvent
+{
+	<#
+	.SYNOPSIS
+	Returns an array of event objects
+		
+	.DESCRIPTION
+	Queries and returns event object names and listener counts for each
+		
+	.PARAMETER sortby
+	Optional parameter to change how the returned information is sorted, by event or listerner count
+		
+	.INPUTS
+	System.String
+
+	.OUTPUTS
+	System.Management.Automation.PSCustomObject
+
+	.NOTES
+	FunctionName : Get-HAEvent
+	Created by   : Ryan McAvoy
+	Date Coded   : 04/23/2022
+	More info    : https://serialscripter.tech
+	#>
+	param
+	(
+		[parameter(Mandatory = $false)]
+		[ValidateSet("event", "listener_count")]
+		$SortBy = "event"
+	)
+	switch ($SortBy)
+	{
+		"event" {
+			$(Invoke-HARestMethod -RestMethod get -Endpoint "events") | Sort-Object -Property event
+		}
+		"listener_count" {
+			$(Invoke-HARestMethod -RestMethod get -Endpoint "events") | Sort-Object -Property listener_count
+		}
+		default {
+			$(Invoke-HARestMethod -RestMethod get -Endpoint "events") | Sort-Object -Property event
+		}
+	}
+}
+
+Function Get-HALogBook
+{
+	<#
+	.SYNOPSIS
+	Returns an array of logbook entries.
+		
+	.DESCRIPTION
+	Queries and returns the logbook entires based on the given parameters (if any) from the connected Home Assistant
+		
+	.PARAMETER entity_id
+	Any valid entity id present in the connect Home Assistant to filter the logbook entires to
+		
+	.PARAMETER start_time
+	An ISO 8601 formatted time stamp that determines the start time of the logbook entires returned.
+	Defaults to one day before the current day.
+		
+	.PARAMETER end_time
+	An ISO 8601 formatted time stamp that determines the end time of the logbook entries returned
+
+	.EXAMPLE
+	Get-HALogBook -entity_id $entity
+
+	Description
+	---------------------------------------
+	Returns logbook entries for the entity_id provided within the last 24 hours as no start time is provided.
+
+	.INPUTS
+	System.String
+
+	.OUTPUTS
+	System.String
+
+	.NOTES
+	FunctionName : Get-HALogbook
+	Created by   : Ryan McAvoy
+	Date Coded   : 04/23/2022
+	More info    : https://serialscripter.tech
+	#>
+	[CmdletBinding()]
+	param
+	(
+		[parameter(Mandatory = $false, ValueFromPipelineByPropertyName = $true, HelpMessage = "Filter logbook entries specific to the entity id provided")]
+		[String]$entity_id,
+		[parameter(Mandatory = $false, HelpMessage = "Optional timestamp in ISO 8601 format (YYYY-MM-DDThh:mm:ssTZD) that determines the start period of the logbook search.")]
+		[ValidateScript({ $_ -match "^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?(([+-]\d\d:\d\d)|Z)?$" })]
+		[String]$start_time,
+		[parameter(Mandatory = $false, HelpMessage = "Optional timestamp ISO 8601 format (YYYY-MM-DDThh:mm:ssTZD) that determines the end period of the logbook search.")]
+		[ValidateScript({ $_ -match "^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d(\.\d+)?(([+-]\d\d:\d\d)|Z)?$" })]
+		[String]$end_time
+	)
+	
+	if ($end_time -or $entity_id)
+	{
+		$Arguments = '?'
+	}
+	
+	foreach ($Param in $($PSBoundParameters.Keys | Where-Object { $_ -ine "start_time" }))
+	{
+		switch ($Param)
+		{
+			"entity_id" {
+				if ($Arguments -eq '?')
+				{
+					$Arguments = "$Arguments" + "entity=$entity_id"
+					Write-Verbose "args equal $Arguments"
+				}
+				else
+				{
+					$Arguments = "$Arguments" + "&entity=$entity_id"
+					Write-Verbose "args equal $Arguments"
+				}
+				
+			}
+			"end_time" {
+				if ($Arguments -eq '?')
+				{
+					$Arguments = "$Arguments" + "end_time=$end_time"
+					Write-Verbose "args equal $Arguments"
+				}
+				else
+				{
+					$Arguments = "$Arguments" + "&end_time=$end_time"
+					Write-Verbose "args equal $Arguments"
+				}
+			}
+		}
+	}
+	
+	if ($start_time)
+	{
+		if ($Arguments)
+		{
+			Write-Verbose "Invoking get REST method on endpoint `"logbook/$start_time`" with args $Arguments"
+			Invoke-HARestMethod -RestMethod get -Endpoint "logbook/$start_time" -Arguments $Arguments
+		}
+		else
+		{
+			Write-Verbose "Invoking get REST method on endpoint `"logbook/$start_time`""
+			Invoke-HARestMethod -RestMethod get -Endpoint "logbook/$start_time"
+		}
+	}
+	else
+	{
+		if ($Arguments)
+		{
+			Write-Verbose "Invoking get REST method on endpoint `"logbook`" with args $Arguments"
+			Invoke-HARestMethod -RestMethod get -Endpoint "logbook" -Arguments $Arguments
+		}
+		else
+		{
+			Write-Verbose "Invoking get REST method on endpoint `"logbook`""
+			Invoke-HARestMethod -RestMethod get -Endpoint "logbook"
+		}
+	}
+}
+
 function Get-HAStateHistory
 {
 	<#
@@ -624,12 +525,13 @@ function Get-HAStateHistory
 	}
 	else
 	{
-		Write-Verbose "No parameters provided that would be passed as args. This will return a lot of data and take some time, consider using on of the three switch parameters."	
+		Write-Verbose "No parameters provided that would be passed as args. This will return a lot of data and take some time, consider using on of the three switch parameters."
 	}
 	
-	forEach ($param in $($PSBoundParameters.Keys | where {$_ -ine "start_time"}))
+	forEach ($param in $($PSBoundParameters.Keys | where { $_ -ine "start_time" }))
 	{
-		switch ($param) {
+		switch ($param)
+		{
 			"end_time" {
 				if ($Arguments -eq "?")
 				{
@@ -721,7 +623,7 @@ function Get-HAStateHistory
 			catch
 			{
 				$Error[0]
-			}			
+			}
 		}
 		else
 		{
@@ -743,12 +645,12 @@ function Get-HAStateHistory
 			try
 			{
 				Write-Verbose "Invoking get REST method on endpoint `"history`" with the following args $Arguments"
-				Invoke-HARestMethod -RestMethod get -Endpoint "history/period" -Arguments $Arguments  | Select-Object -ExpandProperty SyncRoot
+				Invoke-HARestMethod -RestMethod get -Endpoint "history/period" -Arguments $Arguments | Select-Object -ExpandProperty SyncRoot
 			}
 			Catch
 			{
 				$Error[0]
-			}			
+			}
 		}
 		else
 		{
@@ -760,7 +662,7 @@ function Get-HAStateHistory
 			Catch
 			{
 				$Error[0]
-			}			
+			}
 		}
 	}
 }
@@ -818,6 +720,186 @@ function Get-HACameraProxy
 	)
 	
 	Invoke-HARestMethod -RestMethod get -Endpoint "camera_proxy/$entity_id"
+}
+
+function Get-HAServiceDomain
+{
+	<#
+	.SYNOPSIS
+	Get domains for connect Home Assistant services
+		
+	.DESCRIPTION
+	Gets and returns all valid service domains for the connected Home Assistant
+
+	.EXAMPLE
+	Get-HAServiceDomain
+
+	.OUTPUTS
+	System.Management.Automation.PSCustomObject
+
+	.NOTES
+	FunctionName : 
+	Created by   : Ryan McAvoy
+	Date Coded   : 04/23/2022
+	More info    : https://serialscripter.tech
+	#>
+	$Services = Get-HAService
+	
+	Return $($Services | select-object -ExpandProperty domain)
+}
+
+function Get-HAEntityID
+{
+	<#
+	.SYNOPSIS
+	Get all entities in the connected Home Assistant session
+
+	.DESCRIPTION
+	Gets list of all entity ids and all entity domains.
+
+	.EXAMPLE
+	Get-HAEntityID
+
+	.OUTPUTS
+	System.Management.Automation.PSCustomObject
+
+	.NOTES
+	FunctionName : Get-HAEntityID
+	Created by   : Ryan McAvoy
+	Date Coded   : 04/23/2022
+	More info    : https://serialscripter.tech
+	#>
+	
+	$allEntities = $(Get-HAState) | Select-Object -ExpandProperty entity_id
+	$returnEntities = @()
+	
+	foreach ($entity in $allEntities)
+	{
+		$psobj = New-Object -TypeName System.Management.Automation.PSObject
+		$psobj | Add-Member -NotePropertyName domain -NotePropertyValue $($entity -replace "\..*")
+		$psobj | Add-Member -NotePropertyName entity_id -NotePropertyValue $entity
+		$returnEntities += $psobj
+	}
+	
+	Return $($returnEntities | Sort-Object -Property domain)
+}
+
+function Get-HAServiceEntity
+{
+	param
+	(
+		[parameter(Mandatory = $true)]
+		[String]$ServiceDomain
+	)
+	
+	Get-HAEntityID | Where-Object {
+		$_.domain -imatch $ServiceDomain
+	} | Select-Object -ExpandProperty entity_id
+}
+
+# Invoke
+Function Invoke-HAConfigCheck
+{
+	<#
+	.SYNOPSIS
+	Trigger a check of configuration.yaml
+
+	.DESCRIPTION
+	Triggers a config check for the connected Home Assistant. If successful the psobject returned will have a result
+	vaule of 'valid'
+
+	.INPUTS
+	System.String
+
+	.OUTPUTS
+	System.Management.Automation.PSCustomObject
+
+	.NOTES
+	FunctionName : Invoke-HAConfigCheck
+	Created by   : Ryan McAvoy
+	Date Coded   : 04/23/2022
+	More info    : https://serialscripter.tech
+	#>
+	Invoke-HARestMethod -RestMethod post -Endpoint "config/core/check_config"
+}
+
+Function Invoke-HAService
+{
+	<#
+	.SYNOPSIS
+	Calls a service within a specific domain.
+		
+	.DESCRIPTION
+	Triggers the service provided of the service domain for the connected Home Assistant
+		
+	.PARAMETER service
+	The desired service to call for the connected Home Assistant
+		
+	.PARAMETER serviceDomain
+	Optional parameter to specify the domain of the service being called
+		
+	.PARAMETER entity_id
+	Any valid entity id present in the connected Home Assistant
+		
+	.INPUTS
+	System.String
+
+	.OUTPUTS
+	System.Management.Automation.PSCustomObject
+
+	.NOTES
+	FunctionName : Invoke-HAService
+	Created by   : Flemming Sørvollen Skaret
+	Original Release Date : 17.03.2019
+	Original Project : https://github.com/flemmingss/
+
+	.CHANGES:
+	04/23/2022 - Ryan McAvoy - Changed parameters from being all mandatory. Added service validation check. Change to use Invoke-HARestMethod
+	#>
+	[CmdletBinding()]
+	param
+	(
+		[parameter(Mandatory = $false)]
+		[string]$ServiceDomain,
+		[parameter(Mandatory = $true)]
+		[string]$Service,
+		[parameter(Mandatory = $false)]
+		[string]$entity_id
+	)
+	
+	if ($ServiceDomain)
+	{
+		$ValidServices = Get-HAServiceDomain
+		
+		if ($ValidServices.domain -icontains $ServiceDomain)
+		{
+			Write-Warning "Provided service domain is not valid for this home assistant instance."; throw
+		}
+		else
+		{
+			$MatchingDomainServices = $ValidServices | where-object { $_.domain -ieq $ServiceDomain } | select-object -ExpandProperty services
+			if ($MatchingDomainServices -inotcontains $Service)
+			{
+				Write-Warning "Provided service method is not a valid method for the provided service domain."; throw
+			}
+		}
+	}
+	else
+	{
+		$ServiceDomain = $Service -replace ".*\."
+	}
+	
+	if ($entity_id)
+	{
+		$Body = @{
+			entity_id = $entity_id
+		} | ConvertTo-Json
+		Invoke-HARestMethod -RestMethod post -Endpoint "services/$ServiceDomain/$Service" -Body $Body
+	}
+	else
+	{
+		Invoke-HARestMethod -RestMethod post -Endpoint "services/$ServiceDomain/$Service"
+	}
 }
 
 function Invoke-HACheck
@@ -927,32 +1009,28 @@ function Invoke-HARestMethod
 	
 }
 
-function Get-HAServiceDomain
+function Invoke-HAEvent
 {
-	<#
-	.SYNOPSIS
-	Get domains for connect Home Assistant services
-		
-	.DESCRIPTION
-	Gets and returns all valid service domains for the connected Home Assistant
-
-	.EXAMPLE
-	Get-HAServiceDomain
-
-	.OUTPUTS
-	System.Management.Automation.PSCustomObject
-
-	.NOTES
-	FunctionName : 
-	Created by   : Ryan McAvoy
-	Date Coded   : 04/23/2022
-	More info    : https://serialscripter.tech
-	#>
-	$Services = Get-HAService
+	# THIS STILL NEEDS TESTING
+	param
+	(
+		[parameter(Mandatory = $true)]
+		[string]$event_type,
+		[parameter()]
+		$event_data
+	)
 	
-	Return $($Services | select-object -ExpandProperty domain)
+	if ([bool]$event_data)
+	{
+		Invoke-HARestMethod -RestMethod post -Endpoint "events/$event_type" -Body $event_data
+	}
+	else
+	{
+		Invoke-HARestMethod -RestMethod post -Endpoint "events/$event_type"
+	}
 }
 
+# Set
 function Set-HAState
 {
 	<#
@@ -1054,6 +1132,7 @@ function Set-HAState
 	}
 }
 
+# Test
 function Test-HATemplate
 {
 	<#
@@ -1103,54 +1182,6 @@ function Test-HATemplate
 	Invoke-HARestMethod -RestMethod post -Endpoint "template" -Body $Body
 }
 
-function Get-HAEntityID
-{
-	<#
-	.SYNOPSIS
-	Get all entities in the connected Home Assistant session
-
-	.DESCRIPTION
-	Gets list of all entity ids and all entity domains.
-
-	.EXAMPLE
-	Get-HAEntityID
-
-	.OUTPUTS
-	System.Management.Automation.PSCustomObject
-
-	.NOTES
-	FunctionName : Get-HAEntityID
-	Created by   : Ryan McAvoy
-	Date Coded   : 04/23/2022
-	More info    : https://serialscripter.tech
-	#>
-	
-	$allEntities = $(Get-HAState) | Select-Object -ExpandProperty entity_id
-	$returnEntities = @()
-	
-	foreach ($entity in $allEntities)
-	{
-		$psobj = New-Object -TypeName System.Management.Automation.PSObject
-		$psobj | Add-Member -NotePropertyName domain -NotePropertyValue $($entity -replace "\..*")
-		$psobj | Add-Member -NotePropertyName entity_id -NotePropertyValue $entity
-		$returnEntities += $psobj
-	}
-	
-	Return $($returnEntities | Sort-Object -Property domain)
-}
-
-function Get-HAServiceEntity
-{
-	param
-	(
-		[parameter(Mandatory = $true)]
-		[String]$ServiceDomain
-	)
-	
-	Get-HAEntityID | Where-Object {
-		$_.domain -imatch $ServiceDomain
-	} | Select-Object -ExpandProperty entity_id
-}
 $PublicFunctions = @("Test-HATemplate",
 	"Set-HAState",
 	"Get-HAServiceDomain",
@@ -1168,6 +1199,7 @@ $PublicFunctions = @("Test-HATemplate",
 	"Get-HAConfig",
 	"Get-HAState",
 	"Get-HAEntityID",
-	"Get-HAServiceEntity")
+	"Get-HAServiceEntity",
+	"Invoke-HAService")
 
 Export-ModuleMember -Function $PublicFunctions
