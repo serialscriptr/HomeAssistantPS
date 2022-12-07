@@ -6,7 +6,7 @@ I updated the module by adding many of the missing REST endpoints, adding error 
 
 See Home Assistant REST API docs here: https://developers.home-assistant.io/docs/api/rest/
 
-# To do:
+## To do:
 - Create a function that pulls all entity ids for the given service domain
 - Create function for events/<event_type>
 - Update some of the functions to default to asking for confirmation before running
@@ -15,12 +15,9 @@ See Home Assistant REST API docs here: https://developers.home-assistant.io/docs
 - Update all functions to better support -verbose parameter
 - Update majority of functions to support -whatif parameter
 - (Maybe) Provide specific functions for various home assistant service domains
-- (If possible) find a way to make Get-HACameraProxy useful within powershell
 
-# Using the module
+## Using the module
 You can download the module script and execute it to load the modules into memory on the fly by doing the following:
-> (new-object Net.WebClient).DownloadString('https://raw.githubusercontent.com/serialscriptr/HomeAssistantPS/master/HomeAssistant/0.1.0/HomeAssistant.psm1') | iex
-
-Note that the above will throw an error because of the inclusion of 'Export-ModuleMember.' This can be ignored, just know that private functions of the module will also be exposed.
+> (new-object Net.WebClient).DownloadString('https://raw.githubusercontent.com/serialscriptr/HomeAssistantPS/master/HomeAssistant/0.1.3/HomeAssistant.psm1') | iex
 
 You can also install the module to your computer by downloading a copy of the repo and copying the HomeAssistant folder to the "$HOME\Documents\PowerShell\Modules" folder on your computer
