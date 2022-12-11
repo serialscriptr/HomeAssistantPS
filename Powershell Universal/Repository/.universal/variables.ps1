@@ -1,0 +1,2 @@
+New-PSUVariable -Name "HA_Secret" -Vault "PSUSecretStore" -Type "System.String" -Description "Home Assistant Long Lived Token" 
+New-PSUVariable -Name "HA_URL" -Value 'http://10.0.0.200:8123/api/' -Type "System.String" -Description "Home Assistant IP"
