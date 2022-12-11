@@ -129,14 +129,14 @@ function New-HATimeStamp
 	DateTime object to convert to the ISO 8601 format time stamp. Cannot be used with any other parameter other than common ones.
 
 	.EXAMPLE
-	New-TimeStamp -pstime $(get-date)
+	New-HATimeStamp -pstime $(get-date)
 
 	Description
 	---------------------------------------
 	Returns an ISO 8601 formatted time stamp of the current time and date
 
 	.EXAMPLE
-	New-TimeStamp -year 2022 -month 01 -day 05
+	New-HATimeStamp -year 2022 -month 01 -day 05
 
 	Description
 	---------------------------------------
@@ -149,7 +149,7 @@ function New-HATimeStamp
 	System.String
 
 	.NOTES
-	FunctionName : New-TimeStamp
+	FunctionName : New-HATimeStamp
 	Created by   : Ryan McAvoy
 	Date Coded   : 04/23/2022
 	More info    : https://serialscripter.tech
@@ -821,14 +821,62 @@ function Get-HAServiceEntity
 
 function Get-HACalendar
 {
+	<#
+	.SYNOPSIS
+	Return list of calendar entities
+		
+	.DESCRIPTION
+	When no parameters are provided a list of calendars are returned. When a calendar entity is provided with the entity_id parameter a list of
+	calendar entries are returned that fall within the last 24 hours for the provided calendar. Start and end times can be optionally provided to
+	return more calendar entries.
+		
+	.PARAMETER entity_id
+	The calendar entity_id to query calendar entries
+	
+	.PARAMETER start_time
+	The starting date to limit calendar entries returned
+	
+	.PARAMETER end_time
+	The ending date to limit calendar entries returned
+
+	.EXAMPLE
+	Get-HACalendar
+
+	.EXAMPLE
+	Get-HACalendar -entity_id "Calendar.Calendar"
+
+	.INPUTS
+	System.String
+
+	.OUTPUTS
+	System.PsObject
+
+	.NOTES
+	FunctionName : Get-HACalendar
+	Created by   : Ryan McAvoy
+	Date Coded   : 12/11/2022
+	More info    : https://serialscript.tech
+	#>
+	
 	param (
 		[parameter(HelpMessage = "Calendar entity id")]
 		[string]$entity_id,
-		[parameter()]
+		[parameter(HelpMessage = "The starting date to limit calendar entries returned. Defaults to 24 hours ago")]
 		[string]$start_time = $(New-HATimeStamp -pstime $($(Get-date).adddays(-1))),
-		[parameter()]
+		[parameter(HelpMessage = "The end date to limit calendar entires returned. Defaults to current date/time")]
 		[string]$end_time = $(New-HATimeStamp -pstime $(Get-date))
 	)
+	
+	# validate start/end times to verify a positive time span is returned
+	[datetime]$start = ConvertFrom-HATimeStamp -TimeStamp $start_time
+	[datetime]$end = ConvertFrom-HATimeStamp -TimeStamp $end_time
+	$timespan = New-TimeSpan -Start $start -End $end
+	
+	if ($timespan.TotalMilliseconds -le -1)
+	{
+		Write-Warning -Message "Provided start and end time result in a negative time span, time span must return positive value to be valid."
+		throw
+	}
 	
 	if ([bool]$entity_id)
 	{
@@ -1234,4 +1282,42 @@ function Test-HATemplate
 	} | ConvertTo-Json
 	
 	Invoke-HARestMethod -RestMethod post -Endpoint "template" -Body $Body
+}
+
+# ConvertFrom
+function ConvertFrom-HATimeStamp
+{
+	<#
+	.SYNOPSIS
+	Converts ISO 8601 timestamp to powershell date time object
+		
+	.DESCRIPTION
+	Extremely simple helper function to assist anyone using this module that doesn't know how to convert ISO 8601 timestamps to datetime objects
+		
+	.PARAMETER TimeStamp
+	The ISO 8601 timestamp to convert into a datetime object
+
+	.EXAMPLE
+	$TimeStamp = New-HATimeStamp -pstime $(get-date)
+	ConvertFrom-HATimeStamp -TimeStamp $TimeStamp
+
+	.INPUTS
+	System.String
+
+	.OUTPUTS
+	System.DateTime
+
+	.NOTES
+	FunctionName : ConvertFrom-HATimeStamp
+	Created by   : Ryan McAvoy
+	Date Coded   : 12/11/2022
+	More info    : https://serialscript.tech
+	#>
+	
+	param (
+		[parameter(Mandatory = $true)]
+		[string]$TimeStamp
+	)
+	
+	[datetime]::parse($TimeStamp)
 }
