@@ -15,6 +15,7 @@ See Home Assistant REST API docs here: https://developers.home-assistant.io/docs
 - Update all functions to better support -verbose parameter
 - Update majority of functions to support -whatif parameter
 - Provide specific functions for various home assistant service domains (Started! See Set-HALight)
+- Provide markdown documentation on each function for viewing within this repo
 
 ## Using the module
 You can download the module script and execute it to load the modules into memory on the fly by doing the following:
