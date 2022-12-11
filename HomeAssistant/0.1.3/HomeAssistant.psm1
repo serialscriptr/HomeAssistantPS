@@ -100,7 +100,7 @@ Function New-HASession
 	Return $return.message
 }
 
-function New-TimeStamp
+function New-HATimeStamp
 {
 	<#
 	.SYNOPSIS
@@ -817,6 +817,27 @@ function Get-HAServiceEntity
 	Get-HAEntityID | Where-Object {
 		$_.domain -imatch $ServiceDomain
 	} | Select-Object -ExpandProperty entity_id
+}
+
+function Get-HACalendar
+{
+	param (
+		[parameter(HelpMessage = "Calendar entity id")]
+		[string]$entity_id,
+		[parameter()]
+		[string]$start_time = $(New-HATimeStamp -pstime $($(Get-date).adddays(-1))),
+		[parameter()]
+		[string]$end_time = $(New-HATimeStamp -pstime $(Get-date))
+	)
+	
+	if ([bool]$entity_id)
+	{
+		Invoke-HARestMethod -RestMethod get -endpoint "calendars/$entity_id`?start=$start_time&end=$end_time"
+	}
+	else
+	{
+		Invoke-HARestMethod -RestMethod get -Endpoint "calendars"
+	}
 }
 
 # Invoke
