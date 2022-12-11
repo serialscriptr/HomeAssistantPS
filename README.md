@@ -22,3 +22,6 @@ You can download the module script and execute it to load the modules into memor
 > (new-object Net.WebClient).DownloadString('https://raw.githubusercontent.com/serialscriptr/HomeAssistantPS/master/HomeAssistant/0.1.3/HomeAssistant.psm1') | iex
 
 You can also install the module to your computer by downloading a copy of the repo and copying the HomeAssistant folder to the "$HOME\Documents\PowerShell\Modules" folder on your computer
+
+## Powershell Universal
+Some examples of using the Home Assistant REST API with Powershell Universal can be found [here](https://github.com/serialscriptr/HomeAssistantPS/tree/master/Powershell%20Universal/Repository/.universal). Note that the examples do not use this module's functions mostly because its easier to directly call the rest queries with Invoke-RestMethod in these cases.
