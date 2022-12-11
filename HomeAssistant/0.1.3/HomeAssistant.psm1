@@ -957,10 +957,11 @@ Function Invoke-HAService
 		[parameter(Mandatory = $false)]
 		[string]$entity_id
 	)
-	
+	<#
+	# this is incorrectly thowing when it shouldnt
 	if ($ServiceDomain)
 	{
-		$ValidServices = Get-HAServiceDomain
+		$ValidServices = Get-HAService
 		
 		if ($ValidServices.domain -icontains $ServiceDomain)
 		{
@@ -968,8 +969,8 @@ Function Invoke-HAService
 		}
 		else
 		{
-			$MatchingDomainServices = $ValidServices | where-object { $_.domain -ieq $ServiceDomain } | select-object -ExpandProperty services
-			if ($MatchingDomainServices -inotcontains $Service)
+			$MatchingDomainServices = $($ValidServices | where-object { $_.domain -ieq $ServiceDomain } | select-object -ExpandProperty services) | Get-Member -MemberType NoteProperty | Select-Object -ExpandProperty Name
+			if (!($MatchingDomainServices -icontains $Service))
 			{
 				Write-Warning "Provided service method is not a valid method for the provided service domain."; throw
 			}
@@ -977,7 +978,13 @@ Function Invoke-HAService
 	}
 	else
 	{
-		$ServiceDomain = $Service -replace ".*\."
+		$ServiceDomain = $entity_id -replace "\..*"
+	}
+	#>
+	
+	if (!$ServiceDomain)
+	{
+		$ServiceDomain = $entity_id -replace "\..*"
 	}
 	
 	if ($entity_id)
@@ -1320,4 +1327,22 @@ function ConvertFrom-HATimeStamp
 	)
 	
 	[datetime]::parse($TimeStamp)
+}
+
+## HELPER FUNCTIONS ##
+# The goal of the functions below is to assist those who don't know how to invoke common services in Home Assistant
+# The functions below will provide an example of running common services as well being fully functional
+
+# lights
+function Set-HALight
+{
+	param (
+		[parameter(Mandatory = $true, HelpMessage = "the entity id of the light to toggle/turn off/on")]
+		[string]$entity_id,
+		[parameter()]
+		[validateset("toggle","turn_on","turn_off")] # valid services can be pulled from Get-HAService
+		[string]$service = "toggle"
+	)
+	
+	Invoke-HAService -ServiceDomain "light" -Service $service -entity_id $entity_id
 }
