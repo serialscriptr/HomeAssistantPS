@@ -44,13 +44,43 @@ Function New-HASession
 		[string]$token
 	)
 	
-	Set-Variable -Name "ha_api_headers" -Value @{ Authorization = "Bearer $token" } -Visibility Private -Scope Script -Force
+	# Obfuscate the token value in memory and remove the plain text value. Inspired by ITGlueAPI powershell module
+	if ([bool]$token)
+	{
+		Set-Variable -Name "ha_api_token" -Value $(ConvertTo-SecureString -String $token -AsPlainText -Force) -Option ReadOnly -Scope Script -Visibility Private
+		Remove-Variable -Name "token" -Force
+	}
+	else
+	{
+		Write-Warning "Home Assistant long lived token value not provided, please enter it now"
+		$secureToken = Read-Host -AsSecureString
+		if ([string]::IsNullOrWhiteSpace($secureToken))
+		{
+			Write-Warning "Input required, unable to continue"
+			Throw
+		}
+		else
+		{
+			Set-Variable -Name "ha_api_token" -Value $secureToken -Option ReadOnly -Scope Script -Visibility Private
+			Remove-Variable -Name "secureToken" -Force
+		}
+	}
+	
 	Set-Variable -Name "ha_api_url" -Value "http://$($ip):$($port)/api/" -Visibility Private -Scope Script -Force
 	
 	try
 	{
 		Write-Verbose "Attempting to connect to $ha_api_url"
+		
+		# build the api header
+		Set-Variable -Name "ha_api_headers" -Value @{ Authorization = "Bearer $([System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($ha_api_token)))" } -Visibility Private -Scope Script -Force
+		
+		# Validate access/authentication to the target home assistant's api
 		Invoke-RestMethod -uri $ha_api_url -Method GET -Headers $ha_api_headers -SessionVariable ha_session -ErrorAction Stop | Select-Object -ExpandProperty message
+		
+		# remove the api header from memory
+		Set-Variable -Name "ha_api_headers" -Value $null -Scope Script -Force
+		
 		Write-Verbose "Checking some environment information..."
 		Set-Variable -Name "ha_all_entities" -Value $(Get-HAEntityID) -Visibility Private -Scope Script -Force
 		Set-Variable -Name "ha_all_services" -Value $(Get-HAService) -Visibility Private -Scope Script -Force
@@ -735,8 +765,14 @@ function Get-HACameraProxy
 	# Invoke-HARestMethod wont be used here as data will be directly written to the file system
 	if ([bool]$ha_api_url)
 	{
+		# build the api header
+		Set-Variable -Name "ha_api_headers" -Value @{ Authorization = "Bearer $([System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($ha_api_token)))" } -Visibility Private -Scope Script -Force
+		
 		$url = $("$ha_api_url" + "camera_proxy/$entity_id")
 		Invoke-WebRequest -UseBasicParsing -Uri $url -Headers $ha_api_headers -OutFile $Output
+		
+		# remove the api header from memory
+		Set-Variable -Name "ha_api_headers" -Value $null -Scope Script -Force
 	}
 	else
 	{
@@ -1054,6 +1090,9 @@ function Invoke-HARestMethod
 	
 	try
 	{
+		# build the api header
+		Set-Variable -Name "ha_api_headers" -Value @{ Authorization = "Bearer $([System.Runtime.InteropServices.Marshal]::PtrToStringAuto([System.Runtime.InteropServices.Marshal]::SecureStringToBSTR($ha_api_token)))" } -Visibility Private -Scope Script -Force
+		
 		$JoinedParams = $($PSBoundParameters.keys | Sort-Object) -join ""
 		switch ($JoinedParams)
 		{
@@ -1067,14 +1106,23 @@ function Invoke-HARestMethod
 			"EndpointRestMethod" {
 				Write-Verbose "Invoking $RestMethod method on $ha_api_url with the following endpoint: $Endpoint"
 				Invoke-RestMethod -Method $RestMethod -uri ("$ha_api_url" + $Endpoint) -Headers $ha_api_headers -ErrorAction Stop
+				
+				# remove the api header from memory
+				Set-Variable -Name "ha_api_headers" -Value $null -Scope Script -Force
 			}
 			"BodyEndpointRestMethod" {
 				Write-Verbose "Invoking $RestMethod method on $ha_api_url with the following endpoint: $Endpoint and the following body: $Body"
 				Invoke-RestMethod -Method $RestMethod -uri ("$ha_api_url" + $Endpoint) -Body $Body -Headers $ha_api_headers -ErrorAction Stop
+				
+				# remove the api header from memory
+				Set-Variable -Name "ha_api_headers" -Value $null -Scope Script -Force
 			}
 			"ArgumentsEndpointRestMethod" {
 				Write-Verbose "Invoking $RestMethod method on $ha_api_url with the following endpoint: $Endpoint and the following arguments: $Arguments"
 				Invoke-RestMethod -Method $RestMethod -uri ("$ha_api_url" + $Endpoint + $Arguments) -Headers $ha_api_headers -ErrorAction Stop
+				
+				# remove the api header from memory
+				Set-Variable -Name "ha_api_headers" -Value $null -Scope Script -Force
 			}
 			default {
 				# should never be reached
