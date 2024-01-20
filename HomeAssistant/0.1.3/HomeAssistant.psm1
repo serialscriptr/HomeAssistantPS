@@ -924,6 +924,78 @@ function Get-HACalendar
 	}
 }
 
+function Get-HADeviceID
+{
+	<#
+	.SYNOPSIS
+	Return a device id for a provided entity id
+		
+	.DESCRIPTION
+	Using a home assistant template we can pull the device for a given entity id
+	
+	.PARAMETER entity_id
+	Any entity id of a device
+
+	.EXAMPLE
+	Get-HADeviceID -entity_id "light.top_shelf_strip"
+
+	.INPUTS
+	System.String
+
+	.OUTPUTS
+	System.String
+
+	.NOTES
+	FunctionName : Get-HADeviceID
+	Created by   : Ryan McAvoy
+	Date Coded   : 1/20/2024
+	More info    : https://serialscript.tech
+	#>
+	
+	param (
+		[parameter(Mandatory, HelpMessage = "Entity id of a device")]
+		[string]$entity_id
+	)
+	
+	Test-HATemplate -template "{{device_id('$entity_id')}}"
+}
+
+function Get-HADeviceEntity
+{
+	<#
+	.SYNOPSIS
+	Return all entity ids for a provided device id
+		
+	.DESCRIPTION
+	Using a home assistant template we can pull the entity ids for a provided device id
+	
+	.PARAMETER device_id
+	Any valid device id. Use Get-HADeviceID to get a device id
+
+	.EXAMPLE
+	Get-HADeviceEntity -device_id "7146b8be50a2ee9cc09594184c6a01f6"
+
+	.INPUTS
+	System.String
+
+	.OUTPUTS
+	String Array
+
+	.NOTES
+	FunctionName : Get-HADeviceEntity
+	Created by   : Ryan McAvoy
+	Date Coded   : 1/20/2024
+	More info    : https://serialscript.tech
+	#>
+	
+	param (
+		[parameter(Mandatory, HelpMessage = "Device id of a device")]
+		[string]$device_id
+	)
+	
+	Test-HATemplate -template "{{ device_entities('$device_id') }}"
+}
+
 # Invoke
 Function Invoke-HAConfigCheck
 {
