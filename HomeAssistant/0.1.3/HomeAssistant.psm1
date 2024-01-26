@@ -81,44 +81,56 @@ Function New-HASession
 		# remove the api header from memory
 		Set-Variable -Name "ha_api_headers" -Value $null -Scope Script -Force
 		
-		Write-Verbose "Checking some environment information..."
-		Set-Variable -Name "ha_all_entities" -Value $(Get-HAEntityID) -Visibility Private -Scope Script -Force
-		Set-Variable -Name "ha_all_services" -Value $(Get-HAService) -Visibility Private -Scope Script -Force
-		Write-Verbose "Setting up autocomplete helpers..."
-		$entity_autocomplete = {
-			param ($commandName,
-				$parameterName,
-				$stringMatch)
-			$ha_all_entities.entity_id | Where-Object {
-				$_ -like "$stringMatch*"
-			} | ForEach-Object {
-				"'$_'"
-			}
-			
-		}
-		$servicedomain_autocomplete = {
-			param ($commandName,
-				$parameterName,
-				$stringMatch)
-			$ha_all_services.domain | Where-Object {
-				$_ -like "$stringMatch*"
-			} | ForEach-Object {
-				"'$_'"
-			}
-		}
-		Register-ArgumentCompleter -CommandName Get-HALogBook, Invoke-HAService, Get-HAState, Get-HAStateHistory, Set-HAState -ParameterName entity_id -ScriptBlock $entity_autocomplete
-		Register-ArgumentCompleter -CommandName Invoke-HAService, Get-HAServiceEntity -ParameterName ServiceDomain -ScriptBlock $servicedomain_autocomplete
-	}
-	catch
-	{
-		if ((Test-NetConnection -ComputerName $ip -WarningAction SilentlyContinue).PingSucceeded)
+		# determine if we are running noninteractive
+		switch ($psversionTable.PSEdition)
 		{
-			write-output -inputobject "Connection to Home-Assistant API failed. Double check your token."
+			"Core"{
+				$cli = (Get-CimInstance win32_process -Filter "ProcessID=$PID" | where { $_.processname -eq "pwsh.exe" }) | select -expand commandline
+			}
+			"Desktop"{
+				$cli = (Get-CimInstance win32_process -Filter "ProcessID=$PID" | where { $_.processname -eq "powershell.exe" }) | select -expand commandline
+			}
+		}
+		
+		if ($cli -inotlike "*-NonInteractive*" -or $cli -inotlike "*-NoProfile*")
+		{
+			# running interactively
+			Write-Verbose "Checking some environment information..."
+			Set-Variable -Name "ha_all_entities" -Value $(Get-HAEntityID) -Visibility Private -Scope Script -Force
+			Set-Variable -Name "ha_all_services" -Value $(Get-HAService) -Visibility Private -Scope Script -Force
+			Write-Verbose "Setting up autocomplete helpers..."
+			$entity_autocomplete = {
+				param ($commandName,
+					$parameterName,
+					$stringMatch)
+				$ha_all_entities.entity_id | Where-Object {
+					$_ -like "$stringMatch*"
+				} | ForEach-Object {
+					"'$_'"
+				}
+				
+			}
+			$servicedomain_autocomplete = {
+				param ($commandName,
+					$parameterName,
+					$stringMatch)
+				$ha_all_services.domain | Where-Object {
+					$_ -like "$stringMatch*"
+				} | ForEach-Object {
+					"'$_'"
+				}
+			}
+			Register-ArgumentCompleter -CommandName Get-HALogBook, Invoke-HAService, Get-HAState, Get-HAStateHistory, Set-HAState -ParameterName entity_id -ScriptBlock $entity_autocomplete
+			Register-ArgumentCompleter -CommandName Invoke-HAService, Get-HAServiceEntity -ParameterName ServiceDomain -ScriptBlock $servicedomain_autocomplete
 		}
 		else
 		{
-			write-output -inputobject "Connection failed - ICMP request timed out"
-		}
+			Write-Verbose "Running noninteractive, skipping registering autocompleters"
+		}	
+	}
+	catch
+	{
+		Write-Warning "Connection to Home-Assistant API failed. Double check your token."
 		
 		$ha_all_entities = $null
 		$ha_api_url = $null
